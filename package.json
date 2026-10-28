@@ -1,0 +1,39 @@
+{
+  "name": "assertloom",
+  "version": "0.1.0",
+  "description": "AI-powered CLI that analyzes JS/TS code, generates Jest tests, runs them, and repairs failures.",
+  "type": "module",
+  "bin": {
+    "assertloom": "dist/cli/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "start": "node dist/cli/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "testing",
+    "jest",
+    "cli",
+    "ai",
+    "test-generation"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^15.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
