@@ -26,14 +26,25 @@ describe("assertloom CLI", () => {
     const { code, stdout } = runCli("analyze", "examples/math.ts");
 
     expect(code).toBe(0);
-    expect(stdout).toContain("Ready for analysis");
+    expect(stdout).toContain("Found 2 exported functions");
+    expect(stdout).toContain("divide(a: number, b: number): number  [throws]");
   });
 
   it("prints JSON with --json", () => {
     const { code, stdout } = runCli("analyze", "examples/math.ts", "--json");
 
     expect(code).toBe(0);
-    expect(JSON.parse(stdout)).toMatchObject({ file: "examples/math.ts", language: "typescript", processable: true });
+    const analysis = JSON.parse(stdout);
+    expect(analysis).toMatchObject({ file: "examples/math.ts", language: "typescript", moduleSystem: "esm" });
+    expect(analysis.functions.map((f: { name: string }) => f.name)).toEqual(["add", "divide"]);
+  });
+
+  it("reports syntax errors without a stack trace", () => {
+    const { code, stderr } = runCli("analyze", "fixtures/analyzer/invalid.ts");
+
+    expect(code).toBe(1);
+    expect(stderr).toMatch(/^✗ Syntax error at line 1, column \d+/);
+    expect(stderr).not.toContain("    at ");
   });
 
   it("exits non-zero for a missing file", () => {

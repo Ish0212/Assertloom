@@ -2,7 +2,7 @@
 
 Assertloom is an open-source CLI that reads a JavaScript or TypeScript file, generates Jest unit tests for it, runs them, repairs the ones that fail, and reports coverage. It doesn't assume generated tests are correct. Every test is run before it is kept.
 
-> **Status: Week 1, CLI foundation.** `analyze` checks that a file can be processed. AST analysis, test generation, execution, and repair are not built yet.
+> **Status: Week 2, AST analyzer.** `analyze` statically extracts functions, parameters, types, imports, and dependencies. Test generation, execution, and repair are not built yet.
 
 ## Requirements
 
@@ -23,12 +23,24 @@ npm run dev -- analyze examples/math.ts
 Example output:
 
 ```
-✓ Found examples/math.ts (209 bytes)
-✓ Supported TypeScript file (.ts)
-✓ Ready for analysis
+✓ Parsed examples/math.ts (TypeScript, ESM)
+✓ Found 2 exported functions
+✓ Found 0 dependencies (0 external, 0 local, 0 built-in)
+
+  add(a: number, b: number): number
+  divide(a: number, b: number): number  [throws]
 ```
 
-Add `--json` for machine-readable output.
+Add `--json` for the full analysis object. Each function includes its export names, kind (declaration, arrow, or expression), async/generator flags, parameters (name, type, optional, rest, default value), return type, type parameters, whether it throws directly, and the imported modules it uses.
+
+## What the analyzer understands
+
+- ESM and CommonJS: `export function`, `export const fn = () => {}`, `export { a as b }`, `export default`, `module.exports = { ... }`, `module.exports = fn`, and `exports.x = fn`
+- TypeScript: parameter and return types, generics, overloads (only the implementation is kept), `declare` (skipped), and `satisfies`/`as` wrappers
+- Imports: `import`, type-only imports (excluded from runtime dependencies), re-exports, `require()`, and dynamic `import()`, each classified as local, external package, or Node built-in
+- Per-function dependencies, including top-level values built from imports (for example `const prisma = new PrismaClient()`), while ignoring parameters that shadow an import
+
+Classes and object methods outside `module.exports` are not analyzed yet.
 
 ## Build and link locally
 
@@ -42,7 +54,7 @@ assertloom --help
 
 | Command | Description |
 | --- | --- |
-| `assertloom analyze <file> [--json]` | Validate a source file and confirm it can be processed |
+| `assertloom analyze <file> [--json]` | Statically analyze functions, parameters, imports, and dependencies |
 | `assertloom generate <file>` | Validate a source file (test generation not implemented yet) |
 | `assertloom help [command]` | Show help |
 
@@ -61,7 +73,7 @@ npm run build     # outputs to dist/
 ```
 src/
   cli/         Commander entry point, commands, input validation
-  analyzer/    Babel AST analysis (Week 2)
+  analyzer/    Babel AST analysis: parser, functions, dependencies
   ai/          LLM provider interface and prompts (Week 3)
   generator/   Test generation and writing (Week 3)
   runner/      Jest execution and coverage (Week 4)
@@ -87,8 +99,8 @@ Until sandboxing is in place, only run Assertloom against code you trust.
 
 ## Roadmap
 
-1. CLI foundation (current)
-2. AST code analyzer
+1. CLI foundation (done)
+2. AST code analyzer (done)
 3. AI test generation
 4. Execution engine
 5. Self-repair engine

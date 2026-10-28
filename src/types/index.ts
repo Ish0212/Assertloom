@@ -12,3 +12,65 @@ export interface SourceFile {
   language: SourceLanguage;
   sizeBytes: number;
 }
+
+export interface ParameterInfo {
+  /** Identifier name, or the source text of a destructuring pattern such as `{ id, name }`. */
+  name: string;
+  type?: string;
+  optional: boolean;
+  rest: boolean;
+  defaultValue?: string;
+}
+
+export interface FunctionInfo {
+  /** Local name, or `"default"` for an anonymous default export. */
+  name: string;
+  exported: boolean;
+  /** Names this function is exported under; `"default"` for a default export. */
+  exportedAs: string[];
+  kind: "declaration" | "arrow" | "expression";
+  async: boolean;
+  generator: boolean;
+  parameters: ParameterInfo[];
+  returnType?: string;
+  typeParameters?: string;
+  throws: boolean;
+  /** Import sources referenced inside the function body. */
+  dependencies: string[];
+  line: number;
+}
+
+export type ImportCategory = "local" | "external" | "builtin";
+
+export interface ImportSpecifierInfo {
+  kind: "default" | "named" | "namespace";
+  /** Exported name in the source module; `"default"` or `"*"` for default/namespace imports. */
+  imported: string;
+  local: string;
+}
+
+export interface ImportInfo {
+  source: string;
+  kind: "import" | "require" | "dynamic-import" | "re-export";
+  category: ImportCategory;
+  /** Package name for external imports, e.g. `@prisma/client` for `@prisma/client/runtime`. */
+  packageName?: string;
+  typeOnly: boolean;
+  specifiers: ImportSpecifierInfo[];
+  line: number;
+}
+
+export interface DependencySummary {
+  local: string[];
+  external: string[];
+  builtin: string[];
+}
+
+export interface FileAnalysis {
+  file: string;
+  language: SourceLanguage;
+  moduleSystem: "esm" | "commonjs" | "mixed" | "none";
+  functions: FunctionInfo[];
+  imports: ImportInfo[];
+  dependencies: DependencySummary;
+}

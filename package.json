@@ -28,6 +28,9 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@babel/parser": "^8.0.8",
+    "@babel/traverse": "^8.0.7",
+    "@babel/types": "^8.0.8",
     "commander": "^15.0.0"
   },
   "devDependencies": {
