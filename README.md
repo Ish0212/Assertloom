@@ -2,7 +2,7 @@
 
 Assertloom is an open-source CLI that reads a JavaScript or TypeScript file, generates Jest unit tests for it, runs them, repairs the ones that fail, and reports coverage. It doesn't assume generated tests are correct. Every test is run before it is kept.
 
-> **Status: Week 3, AI test generation.** `analyze` statically extracts functions and dependencies, and `generate` writes Jest tests for pure functions to a preview file. Running, repairing, and mocking are not built yet.
+> **Status: Week 4, execution engine.** `analyze` statically extracts functions and dependencies, `generate` writes Jest tests for pure functions and runs them, and `run` reports pass/fail counts and coverage for any test file. Automatic repair and mocking are not built yet.
 
 ## Requirements
 
@@ -70,6 +70,37 @@ How it works:
 2. The model receives the source file, the function signatures, and the exact names to call them by. It returns structured test cases (name, category, body) validated with Zod, not a whole file.
 3. Each case is checked before it is kept: it must parse, call `expect()`, and must not use `import`, `require`, `jest.mock`, `process` methods, or its own `describe`/`it`. Rejected cases are listed with the reason.
 4. Assertloom writes the imports and `describe`/`it` blocks itself, parses the finished file, and saves it as `<name>.test.preview.<ext>` next to the source. Jest's default pattern ignores that name, because the tests have not been run yet.
+5. Assertloom runs the preview with Jest. If every test passes, it is saved as `<name>.test.<ext>` and the preview is deleted. If any fail, the preview is kept for review (automatic repair arrives in Week 5). Use `--no-run` to skip this step.
+
+## Running tests
+
+`run` executes any test file and reports results and coverage for its source file, which is inferred from the name (`math.test.preview.ts` → `math.ts`) or passed with `--source`.
+
+```bash
+npx tsx src/cli/index.ts run fixtures/runner/failing.test.preview.ts --source fixtures/runner/calc.ts
+```
+
+```
+! Ran Jest: 1 passed, 3 failed (bundled Jest, Assertloom default config, 9.3s)
+  ✗ add › has a wrong expectation  [assertion]
+      Error: expect(received).toBe(expected) // Object.is equality
+      Expected: 5
+      Received: 4
+  ✗ divide › calls a method that does not exist  [error]
+      TypeError: result.toFixedd is not a function
+  ✗ sign › waits forever  [timeout]
+      Error: thrown: "Exceeded timeout of 5000 ms for a test.
+✓ Coverage: 71.4% lines, 66.7% branches, 66.7% functions
+```
+
+Add `--json` for the full result and `--timeout <seconds>` to change the 120-second limit.
+
+How the runner works:
+
+- **Jest setup.** Assertloom finds the project root (the nearest `package.json`, without leaving the git repository). If the project has its own Jest config (`jest.config.js/.cjs/.mjs/.json` or a `"jest"` key in `package.json`), Assertloom uses the project's Jest with that config and overrides only test selection and coverage settings. Otherwise it uses its bundled Jest with Babel for TypeScript and JSX, so projects without Jest work too. TypeScript Jest configs and multi-project configs fall back to the default config for now.
+- **Isolation.** Jest runs in a child process, one file at a time (`--runInBand`), with a hard timeout and a 5-second per-test timeout. Environment variables that look like credentials (`*KEY*`, `*TOKEN*`, `*SECRET*`, `*PASSWORD*`, and similar) are removed before the tests run.
+- **Results.** Each test is reported as passed, failed, or skipped. Failures are labeled `assertion` (an `expect` did not match), `error` (an exception), or `timeout`. Problems that stop the whole file from running are reported separately as infrastructure failures: `module-not-found`, `transform` (syntax or module-format problems), `suite-error`, `crash`, or `timeout`.
+- **Coverage.** Measured with V8 for the source file only, as line, statement, function, and branch percentages.
 
 ## Build and link locally
 
@@ -84,7 +115,8 @@ assertloom --help
 | Command | Description |
 | --- | --- |
 | `assertloom analyze <file> [--json]` | Statically analyze functions, parameters, imports, and dependencies |
-| `assertloom generate <file> [--model] [--out] [--dry-run] [--force]` | Generate Jest tests for pure exported functions into a preview file |
+| `assertloom generate <file> [--model] [--out] [--dry-run] [--no-run] [--force]` | Generate Jest tests for pure exported functions, run them, and keep them if they pass |
+| `assertloom run <testFile> [--source] [--timeout] [--json]` | Run a test file with Jest and report results and coverage |
 | `assertloom help [command]` | Show help |
 
 Supported extensions: `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`. Missing files, directories, unsupported extensions, existing `*.test.*`/`*.spec.*` files, and files over 1 MB are rejected with exit code 1.
@@ -105,7 +137,7 @@ src/
   analyzer/    Babel AST analysis: parser, functions, dependencies
   ai/          LLM provider interface, OpenAI provider, prompts, secret redaction
   generator/   Import planning, response schema, case validation, test file writing
-  runner/      Jest execution and coverage (Week 4)
+  runner/      Jest setup detection, isolated Jest runs, result parsing, coverage
   repair/      Failure classification and repair loop (Week 5)
   types/       Shared types
 examples/      Sample source files
@@ -118,7 +150,7 @@ tests/         Assertloom's own tests (Vitest)
 Assertloom treats target repositories and generated tests as untrusted:
 
 - Analysis is static. Target code is never executed during analysis.
-- Generated tests will run in a resource-limited environment with network access off by default.
+- Generated tests run in a separate process with a hard timeout and without credential-like environment variables. Blocking network access is planned for Week 7.
 - Only the target file is sent to the AI provider. `.env` files and other files are never sent, likely secrets (API keys, tokens, private keys, credentials in URLs, quoted `password`/`secret`/`token` values) are redacted first, and OpenAI requests are made with `store: false`.
 - Files that Assertloom did not generate are never overwritten without `--force`.
 - The repair loop only edits generated tests, never production source code.
@@ -131,7 +163,7 @@ Until sandboxing is in place, only run Assertloom against code you trust.
 1. CLI foundation (done)
 2. AST code analyzer (done)
 3. AI test generation (built; tested with a fake provider, live model run pending)
-4. Execution engine
+4. Execution engine (done)
 5. Self-repair engine
 6. Dependency mocking
 7. Evaluation and hardening

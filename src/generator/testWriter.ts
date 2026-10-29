@@ -15,6 +15,12 @@ export function previewPathFor(sourcePath: string): string {
   return path.join(path.dirname(sourcePath), `${path.basename(sourcePath, ext)}.test.preview${ext}`);
 }
 
+/** `src/math.ts` → `src/math.test.ts`. */
+export function testPathFor(sourcePath: string): string {
+  const ext = path.extname(sourcePath);
+  return path.join(path.dirname(sourcePath), `${path.basename(sourcePath, ext)}.test${ext}`);
+}
+
 function indent(text: string, spaces: number): string {
   const pad = " ".repeat(spaces);
   return text

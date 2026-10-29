@@ -5,3 +5,4 @@ coverage/
 .env.*
 *.log
 *.test.preview.*
+!fixtures/**/*.test.preview.*
