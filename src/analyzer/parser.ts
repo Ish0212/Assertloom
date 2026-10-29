@@ -1,19 +1,19 @@
 import { parse, type ParserPlugin } from "@babel/parser";
 import type { File } from "@babel/types";
+import { UserError } from "../errors.js";
 import type { SupportedExtension } from "../types/index.js";
 
-export class ParseError extends Error {
+export class ParseError extends UserError {
   constructor(
     message: string,
     readonly line?: number,
     readonly column?: number,
   ) {
     super(message);
-    this.name = "ParseError";
   }
 }
 
-function pluginsFor(extension: SupportedExtension): ParserPlugin[] {
+export function pluginsFor(extension: SupportedExtension): ParserPlugin[] {
   switch (extension) {
     case ".ts":
     case ".mts":

@@ -1,12 +1,11 @@
 #!/usr/bin/env node
-import { ParseError } from "../analyzer/index.js";
-import { FileValidationError } from "./validateFile.js";
+import { UserError } from "../errors.js";
 import { createProgram } from "./program.js";
 
 try {
   await createProgram().parseAsync(process.argv);
 } catch (error) {
-  if (error instanceof FileValidationError || error instanceof ParseError) {
+  if (error instanceof UserError) {
     console.error(`✗ ${error.message}`);
   } else {
     console.error(error);

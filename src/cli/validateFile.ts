@@ -1,13 +1,9 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
+import { UserError } from "../errors.js";
 import { SUPPORTED_EXTENSIONS, type SourceFile, type SupportedExtension } from "../types/index.js";
 
-export class FileValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "FileValidationError";
-  }
-}
+export class FileValidationError extends UserError {}
 
 const MAX_FILE_SIZE_BYTES = 1024 * 1024;
 

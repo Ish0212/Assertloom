@@ -6,9 +6,11 @@ const root = path.resolve(import.meta.dirname, "..");
 const tsxCli = path.join(root, "node_modules", "tsx", "dist", "cli.mjs");
 
 function runCli(...args: string[]) {
+  const { OPENAI_API_KEY: _key, ...env } = process.env;
   const result = spawnSync(process.execPath, [tsxCli, "src/cli/index.ts", ...args], {
     cwd: root,
     encoding: "utf8",
+    env,
   });
   return { code: result.status, stdout: result.stdout, stderr: result.stderr };
 }
@@ -59,5 +61,19 @@ describe("assertloom CLI", () => {
 
     expect(code).toBe(1);
     expect(stderr).toContain("Unsupported file type");
+  });
+
+  it("explains how to set an API key when generating without one", () => {
+    const { code, stderr } = runCli("generate", "examples/math.ts");
+
+    expect(code).toBe(1);
+    expect(stderr).toMatch(/^✗ OPENAI_API_KEY is not set/);
+  });
+
+  it("rejects unknown providers", () => {
+    const { code, stderr } = runCli("generate", "examples/math.ts", "--provider", "nope");
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("Allowed choices are openai");
   });
 }, 30_000);

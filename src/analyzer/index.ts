@@ -4,7 +4,7 @@ import { scanImports, summarizeDependencies } from "./dependencies.js";
 import { extractFunctions } from "./functions.js";
 import { parseSource } from "./parser.js";
 
-export { ParseError } from "./parser.js";
+export { ParseError, parseSource } from "./parser.js";
 
 /** Statically analyzes source code. Target code is parsed, never executed. */
 export function analyzeSource(code: string, source: Pick<SourceFile, "inputPath" | "extension" | "language">): FileAnalysis {
