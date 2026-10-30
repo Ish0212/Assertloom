@@ -1,2 +1,2 @@
-/** Classifies failing tests and repairs them in a bounded loop. Must never modify production source files. */
-export {};
+export { classifyInfraFailure, classifyTestFailure, type FailureCategory } from "./classifyFailure.js";
+export { MAX_REPAIR_ATTEMPTS, repairTests, summarize, type RepairAttempt, type RepairResult, type StopReason } from "./repairLoop.js";

@@ -76,4 +76,11 @@ describe("assertloom CLI", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("Allowed choices are openai");
   });
+
+  it("rejects a repair budget above the hard limit", () => {
+    const { code, stderr } = runCli("generate", "examples/math.ts", "--max-attempts", "5");
+
+    expect(code).toBe(1);
+    expect(stderr).toMatch(/^✗ --max-attempts must be a whole number from 0 to 3/);
+  });
 }, 30_000);

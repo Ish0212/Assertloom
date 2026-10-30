@@ -36,9 +36,11 @@ export function renderTestFile(options: {
   extension: SupportedExtension;
 }): string {
   const blocks = options.suites.map(({ binding, cases }) => {
-    const tests = cases.map(
-      (c) => `  it(${JSON.stringify(c.name)}, ${c.async ? "async " : ""}() => {\n${indent(c.body, 4)}\n  });`,
-    );
+    const tests = cases.map((c) => {
+      const comment = c.skipReason ? `  // Assertloom skipped this test: ${c.skipReason.replace(/\s+/g, " ")}\n` : "";
+      const it = c.skipReason ? "it.skip" : "it";
+      return `${comment}  ${it}(${JSON.stringify(c.name)}, ${c.async ? "async " : ""}() => {\n${indent(c.body, 4)}\n  });`;
+    });
     return `describe(${JSON.stringify(binding.binding)}, () => {\n${tests.join("\n\n")}\n});`;
   });
 

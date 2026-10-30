@@ -28,7 +28,10 @@ export interface GenerationResult {
   analysis: FileAnalysis;
   testPath: string;
   content: string;
+  importStatements: string[];
   suites: ValidatedSuite[];
+  /** The source as sent to the model, with secrets redacted. */
+  promptSource: string;
   skipped: SkippedFunction[];
   rejected: RejectedCase[];
   model: string;
@@ -100,7 +103,9 @@ export async function generateTests(options: {
     analysis,
     testPath,
     content,
+    importStatements: plan.statements,
     suites,
+    promptSource: redacted.code,
     skipped,
     rejected,
     model: response.model,

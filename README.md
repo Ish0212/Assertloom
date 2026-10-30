@@ -2,7 +2,7 @@
 
 Assertloom is an open-source CLI that reads a JavaScript or TypeScript file, generates Jest unit tests for it, runs them, repairs the ones that fail, and reports coverage. It doesn't assume generated tests are correct. Every test is run before it is kept.
 
-> **Status: Week 4, execution engine.** `analyze` statically extracts functions and dependencies, `generate` writes Jest tests for pure functions and runs them, and `run` reports pass/fail counts and coverage for any test file. Automatic repair and mocking are not built yet.
+> **Status: Week 5, self-repair engine.** `analyze` statically extracts functions and dependencies. `generate` writes Jest tests for pure functions, runs them, and repairs failing tests in up to three rounds. `run` reports pass/fail counts and coverage for any test file. Mocking is not built yet.
 
 ## Requirements
 
@@ -70,7 +70,28 @@ How it works:
 2. The model receives the source file, the function signatures, and the exact names to call them by. It returns structured test cases (name, category, body) validated with Zod, not a whole file.
 3. Each case is checked before it is kept: it must parse, call `expect()`, and must not use `import`, `require`, `jest.mock`, `process` methods, or its own `describe`/`it`. Rejected cases are listed with the reason.
 4. Assertloom writes the imports and `describe`/`it` blocks itself, parses the finished file, and saves it as `<name>.test.preview.<ext>` next to the source. Jest's default pattern ignores that name, because the tests have not been run yet.
-5. Assertloom runs the preview with Jest. If every test passes, it is saved as `<name>.test.<ext>` and the preview is deleted. If any fail, the preview is kept for review (automatic repair arrives in Week 5). Use `--no-run` to skip this step.
+5. Assertloom runs the preview with Jest. If every test passes, it is saved as `<name>.test.<ext>` and the preview is deleted. If any fail, Assertloom tries to repair them (see below), and keeps the preview for review if failures remain. Use `--no-run` to skip running and repairing.
+
+## Repairing failing tests
+
+When generated tests fail, `generate` sends the model the failing test bodies, a trimmed failure message for each, and the source file marked read-only. It then reruns Jest. For each failing test, the model chooses one of three actions:
+
+- **fix**: replace the test body, for example to correct a wrong expected value or a missing `await`. The new body goes through the same checks as a generated one.
+- **skip**: the test looks right and the source looks wrong. The test is kept as `it.skip` with a comment explaining the suspected bug, so a real bug is not hidden by changing the assertion.
+- **remove**: the test cannot be made reliable.
+
+Failures are classified before anything is sent. Assertion, runtime, and timeout failures can be repaired. Failures that need mocks (network or database calls) are set aside, and failures that stop the whole file from running (missing modules, syntax or config problems) end the loop, because editing test bodies cannot fix them.
+
+Limits:
+
+- At most 3 rounds (`--max-attempts 0` to `3`; `--no-repair` turns repair off). The loop also stops when everything passes or the model proposes no usable fix.
+- A round that makes a previously passing test fail is undone, and the loop stops.
+- Tests still failing at the end are kept as `it.skip` with the reason, so the file runs cleanly and the problems stay visible.
+- Repair only writes the generated test file. Assertloom hashes the source file before and after, and restores it if a test changed it.
+
+Use `--report <file>` to save JSON with the results of the first run, every repair round (requested changes, rejected proposals, before/after counts, token usage), and the final run.
+
+`fixtures/repair/` holds a documented set of intentionally failing tests (wrong values, a misspelled function name, a missing `await`, a real bug in the source, and a network call), with the repairs a model would propose. Assertloom's test suite runs that scenario through real Jest.
 
 ## Running tests
 
@@ -115,7 +136,7 @@ assertloom --help
 | Command | Description |
 | --- | --- |
 | `assertloom analyze <file> [--json]` | Statically analyze functions, parameters, imports, and dependencies |
-| `assertloom generate <file> [--model] [--out] [--dry-run] [--no-run] [--force]` | Generate Jest tests for pure exported functions, run them, and keep them if they pass |
+| `assertloom generate <file> [--model] [--out] [--dry-run] [--no-run] [--no-repair] [--max-attempts] [--report] [--force]` | Generate Jest tests for pure exported functions, run and repair them, and keep them if they pass |
 | `assertloom run <testFile> [--source] [--timeout] [--json]` | Run a test file with Jest and report results and coverage |
 | `assertloom help [command]` | Show help |
 
@@ -138,7 +159,7 @@ src/
   ai/          LLM provider interface, OpenAI provider, prompts, secret redaction
   generator/   Import planning, response schema, case validation, test file writing
   runner/      Jest setup detection, isolated Jest runs, result parsing, coverage
-  repair/      Failure classification and repair loop (Week 5)
+  repair/      Failure classification and the repair loop
   types/       Shared types
 examples/      Sample source files
 fixtures/      Inputs for Assertloom's own tests
@@ -164,7 +185,7 @@ Until sandboxing is in place, only run Assertloom against code you trust.
 2. AST code analyzer (done)
 3. AI test generation (built; tested with a fake provider, live model run pending)
 4. Execution engine (done)
-5. Self-repair engine
+5. Self-repair engine (built; tested with a fake provider and real Jest, live model run pending)
 6. Dependency mocking
 7. Evaluation and hardening
 8. Open-source release

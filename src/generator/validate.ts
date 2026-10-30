@@ -12,6 +12,8 @@ const MAX_NAME_LENGTH = 200;
 
 export interface AcceptedCase extends GeneratedTestCase {
   async: boolean;
+  /** Set when the repair loop gives up on a case; rendered as `it.skip` with this reason. */
+  skipReason?: string;
 }
 
 export interface ValidatedSuite {
