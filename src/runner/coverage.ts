@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { CoverageMetrics } from "./types.js";
@@ -14,8 +15,17 @@ function percent(metric: Metric | undefined): number | null {
   return metric.pct;
 }
 
+/** Resolves symlinks and Windows short names (`/var` → `/private/var`, `RUNNER~1` → `runneradmin`). */
+export function realPath(file: string): string {
+  try {
+    return realpathSync.native(path.resolve(file));
+  } catch {
+    return path.resolve(file);
+  }
+}
+
 function samePath(a: string, b: string): boolean {
-  const normalize = (p: string) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
+  const normalize = (p: string) => (process.platform === "win32" ? realPath(p).toLowerCase() : realPath(p));
   return normalize(a) === normalize(b);
 }
 

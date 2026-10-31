@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -100,6 +100,23 @@ describe("readCoverage", () => {
       expect(await readCoverage(summary, calc)).toEqual({ lines: 71.42, statements: 71.42, functions: 66.66, branches: null });
       expect(await readCoverage(summary, fixture("other.ts"))).toBeUndefined();
       expect(await readCoverage(path.join(dir, "missing.json"), calc)).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("matches a source path reached through a symlink, as Jest reports real paths", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "assertloom-"));
+    try {
+      await mkdir(path.join(dir, "real"));
+      await writeFile(path.join(dir, "real", "a.js"), "");
+      await symlink(path.join(dir, "real"), path.join(dir, "link"), "junction");
+      const summary = path.join(dir, "coverage-summary.json");
+      const metric = { total: 1, covered: 1, skipped: 0, pct: 100 };
+      const realFile = await realpath(path.join(dir, "real", "a.js"));
+      await writeFile(summary, JSON.stringify({ [realFile]: { lines: metric, statements: metric, functions: metric, branches: metric } }));
+
+      expect((await readCoverage(summary, path.join(dir, "link", "a.js")))?.lines).toBe(100);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

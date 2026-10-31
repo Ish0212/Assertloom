@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { readCoverage } from "./coverage.js";
+import { readCoverage, realPath } from "./coverage.js";
 import { writeRunConfig } from "./jestConfig.js";
 import { writeNetworkGuard } from "./networkGuard.js";
 import { detectJestSetup, jestCanStartIn, type JestSetup } from "./project.js";
@@ -77,8 +77,9 @@ function runProcess(
 }
 
 export async function runJest(options: RunOptions): Promise<RunResult> {
-  const testPath = path.resolve(options.testPath);
-  const sourcePath = path.resolve(options.sourcePath);
+  // Jest reports real paths, so configure it with them too.
+  const testPath = realPath(options.testPath);
+  const sourcePath = realPath(options.sourcePath);
   const timeoutMs = options.timeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
   const setup = detectJestSetup(sourcePath);
   const runDir = await mkdtemp(path.join(os.tmpdir(), "assertloom-run-"));
