@@ -240,6 +240,10 @@ export async function repairTests(options: RepairOptions): Promise<RepairResult>
           invalid(`proposed body ${check.error}`);
           continue;
         }
+        if (proposal.body.trim() === testCase.body.trim()) {
+          invalid("proposed body is unchanged");
+          continue;
+        }
         testCase.body = proposal.body.trim();
         testCase.async = check.async;
       } else if (proposal.action === "skip") {

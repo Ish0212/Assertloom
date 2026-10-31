@@ -114,6 +114,7 @@ test("child process", async () => {
     const run = await runJest({ testPath, sourcePath });
 
     expect(run.setup).toContain("network blocked");
+    expect(run.infra).toBeUndefined();
     expect(run).toMatchObject({ status: "failed", passed: 0, failed: 4 });
     for (const name of ["fetch", "http", "dns"]) {
       const test = run.tests.find((t) => t.name === name);
@@ -127,6 +128,7 @@ test("child process", async () => {
     const run = await runJest({ testPath, sourcePath, allowNetwork: true });
 
     expect(run.setup).toContain("network allowed");
+    expect(run.infra).toBeUndefined();
     expect(run).toMatchObject({ status: "passed", passed: 4 });
   });
 });

@@ -204,6 +204,7 @@ describe("generated tests with mocks (real Jest)", { timeout: 300_000 }, () => {
     const run = await runJest({ testPath: generated.testPath, sourcePath: source.absolutePath });
 
     expect(run.tests.filter((t) => t.status === "failed").map((t) => `${t.name}: ${t.failure?.message}`)).toEqual([]);
+    expect(run.infra).toBeUndefined();
     expect(run).toMatchObject({ status: "passed", passed: scenario.tests, failed: 0 });
     expect(run.coverage?.lines).toBe(100);
   });

@@ -146,7 +146,10 @@ describe("repairTests (scripted runner)", () => {
   });
 
   it("stops after three attempts and skips what is still failing", async () => {
-    const provider = new FakeProvider(fixB);
+    let guess = 10;
+    const provider = new FakeProvider(() =>
+      repairs({ functionName: "divide", name: "B", action: "fix", body: `expect(divide(4, 2)).toBe(${guess++});`, reason: "another guess" }),
+    );
     const stillFailing = () => runOf([["add", "A", "passed"], ["divide", "B", "failed"]]);
     const runner = scriptedRunner([stillFailing(), stillFailing(), stillFailing(), runOf([["add", "A", "passed"], ["divide", "B", "skipped"]])]);
 
@@ -180,6 +183,17 @@ describe("repairTests (scripted runner)", () => {
     expect(result.stopReason).toBe("no-valid-repairs");
     expect(result.attempts[0].invalid).toEqual([{ functionName: "divide", name: "B", reason: "proposed body does not call expect()" }]);
     expect(runner.seen).toHaveLength(1);
+  });
+
+  it("rejects a fix that returns the failing body unchanged", async () => {
+    const provider = new FakeProvider(repairs({ functionName: "divide", name: "B", action: "fix", body: "expect(divide(4, 2)).toBe(3);", reason: "same" }));
+    const runner = scriptedRunner([runOf([["add", "A", "passed"], ["divide", "B", "skipped"]])]);
+
+    const result = await repairTests({ ...base, provider, initialRun: runOf([["add", "A", "passed"], ["divide", "B", "failed"]]), runTests: runner.run });
+
+    expect(result.stopReason).toBe("no-valid-repairs");
+    expect(result.attempts[0].invalid).toEqual([{ functionName: "divide", name: "B", reason: "proposed body is unchanged" }]);
+    expect(provider.requests).toHaveLength(1);
   });
 
   it("removes tests the model says cannot be made reliable", async () => {
@@ -265,6 +279,7 @@ describe("documented repair scenario (real Jest)", { timeout: 300_000 }, () => {
       await writeTestFile(generated.testPath, generated.content);
       const initialRun = await runJest({ testPath: generated.testPath, sourcePath });
 
+      expect(initialRun.infra).toBeUndefined();
       expect(initialRun).toMatchObject({ status: "failed", passed: 3, failed: 7 });
 
       const result = await repairTests({

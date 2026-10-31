@@ -250,6 +250,7 @@ describe.concurrent("runJest (real Jest runs)", { timeout: 180_000 }, () => {
       await writeTestFile(generated.testPath, generated.content);
       const result = await runJest({ testPath: generated.testPath, sourcePath });
 
+      expect(result.infra).toBeUndefined();
       expect(result).toMatchObject({ status: "passed", passed: 3, failed: 0 });
       expect(result.coverage).toEqual({ lines: 100, statements: 100, functions: 100, branches: 100 });
     } finally {
