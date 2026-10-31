@@ -11,6 +11,7 @@ import type {
 } from "@babel/types";
 import type { FunctionInfo, ParameterInfo } from "../types/index.js";
 import type { ImportScan } from "./dependencies.js";
+import { isMockableGlobal } from "./usage.js";
 
 type FunctionNode = FunctionDeclaration | FunctionExpression | ArrowFunctionExpression | ObjectMethod;
 
@@ -205,10 +206,12 @@ export function extractFunctions(ast: File, code: string, scan: ImportScan): Fun
       const node = candidate.node;
       const programScope = path.scope.getProgramParent();
       const dependencies = new Set<string>();
+      const globals = new Set<string>();
       let throws = false;
 
       path.traverse({
         "Identifier|JSXIdentifier"(idPath) {
+          if (isMockableGlobal(idPath)) globals.add((idPath.node as { name: string }).name);
           if (!idPath.isReferencedIdentifier()) return;
           const name = (idPath.node as { name: string }).name;
           const source = scan.bindings.get(name);
@@ -235,6 +238,7 @@ export function extractFunctions(ast: File, code: string, scan: ImportScan): Fun
         typeParameters: slice(code, node.typeParameters),
         throws,
         dependencies: [...dependencies].sort(),
+        globals: [...globals].sort(),
         line: node.loc?.start.line ?? 0,
       });
     },

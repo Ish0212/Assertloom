@@ -5,9 +5,10 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildGenerationPrompt, GENERATION_SYSTEM_PROMPT } from "../src/ai/prompts.js";
 import { redactSecrets } from "../src/ai/redact.js";
-import { analyzeFile, analyzeSource, parseSource } from "../src/analyzer/index.js";
+import { analyzeFile, parseSource } from "../src/analyzer/index.js";
 import { validateSourceFile } from "../src/cli/validateFile.js";
-import { generateTests, GenerationError, selectTestable, TestFileExistsError, writeTestFile } from "../src/generator/index.js";
+import { generateTests, GenerationError, TestFileExistsError, writeTestFile } from "../src/generator/index.js";
+import type { FileAnalysis } from "../src/types/index.js";
 import { importSpecifier, planImports } from "../src/generator/importPlan.js";
 import { GenerationSchema, type Generation } from "../src/generator/schema.js";
 import { GENERATED_HEADER, previewPathFor } from "../src/generator/testWriter.js";
@@ -23,7 +24,11 @@ async function load(file: string) {
 
 async function planFor(file: string) {
   const { source, analysis } = await load(file);
-  return planImports(analysis, selectTestable(analysis).testable, source.absolutePath, previewPathFor(source.absolutePath));
+  return planImports(analysis, exported(analysis), source.absolutePath, previewPathFor(source.absolutePath));
+}
+
+function exported(analysis: FileAnalysis) {
+  return analysis.functions.filter((fn) => fn.exported);
 }
 
 const mathGeneration: Generation = {
@@ -50,33 +55,6 @@ const mathGeneration: Generation = {
   ],
 };
 
-describe("selectTestable", () => {
-  it("tests pure functions and skips ones that need mocks", async () => {
-    const { analysis } = await load("fixtures/analyzer/dependencies.ts");
-    const { testable, skipped } = selectTestable(analysis);
-
-    expect(testable.map((f) => f.name)).toEqual(["shout"]);
-    expect(skipped.find((s) => s.fn.name === "getUser")?.reason).toBe("uses axios (needs mocking)");
-    expect(skipped.find((s) => s.fn.name === "readConfigFile")?.reason).toBe("uses node:fs/promises (needs mocking)");
-  });
-
-  it("ignores functions that are not exported", async () => {
-    const { analysis } = await load("fixtures/analyzer/basic.ts");
-
-    expect(selectTestable(analysis).testable.map((f) => f.name)).not.toContain("clamp");
-  });
-
-  it("treats pure built-ins like path as safe", () => {
-    const analysis = analyzeSource(`import path from "node:path"; export const ext = (f: string) => path.extname(f);`, {
-      inputPath: "inline.ts",
-      extension: ".ts",
-      language: "typescript",
-    });
-
-    expect(selectTestable(analysis).testable.map((f) => f.name)).toEqual(["ext"]);
-  });
-});
-
 describe("planImports", () => {
   it("imports named ESM exports without the .ts extension", async () => {
     expect((await planFor("examples/math.ts")).statements).toEqual(['import { add, divide } from "./math";']);
@@ -93,9 +71,9 @@ describe("planImports", () => {
   });
 
   it("uses require() for CommonJS and keeps .cjs extensions", async () => {
-    expect((await planFor("fixtures/analyzer/commonjs.js")).statements).toEqual(['const { format } = require("./commonjs");']);
+    expect((await planFor("fixtures/analyzer/commonjs.js")).statements).toEqual(['const { readJson, writeJson, format } = require("./commonjs");']);
     expect((await planFor("fixtures/analyzer/exports-object.cjs")).statements).toEqual([
-      'const { isEmpty, retry } = require("./exports-object.cjs");',
+      'const { pick, isEmpty, retry } = require("./exports-object.cjs");',
     ]);
     expect((await planFor("fixtures/analyzer/default-export.cjs")).statements).toEqual([
       'const fetchAll = require("./default-export.cjs");',
@@ -122,6 +100,7 @@ describe("checkBody", () => {
     ["add(1, 2);", "does not call expect()"],
     ["const fs = require('fs'); expect(fs).toBeDefined();", "uses require()"],
     ["jest.mock('./db'); expect(1).toBe(1);", "calls jest.mock()"],
+    ["const real = jest.requireActual('pg'); expect(real).toBeDefined();", "calls jest.requireActual()"],
     ["const m = await import('./x'); expect(m).toBeDefined();", "uses import()"],
     ["process.exit(1); expect(1).toBe(1);", "calls a process method"],
     ["it('nested', () => { expect(1).toBe(1); });", "wraps the body in it()"],
@@ -167,7 +146,7 @@ describe("validateGeneration", () => {
 describe("prompts", () => {
   it("lists bindings with signatures and includes the source", async () => {
     const { source, analysis } = await load("fixtures/analyzer/exports.ts");
-    const plan = planImports(analysis, selectTestable(analysis).testable, source.absolutePath, previewPathFor(source.absolutePath));
+    const plan = planImports(analysis, exported(analysis), source.absolutePath, previewPathFor(source.absolutePath));
     const prompt = buildGenerationPrompt({ analysis, code: "SOURCE_MARKER", bindings: plan.bindings, testFileName: "exports.test.preview.ts" });
 
     expect(prompt).toContain("- `toSlug`: `toSlug(text: string): string` (declared as `slugify` in the source; defined at line 7)");
@@ -274,11 +253,12 @@ describe("divide", () => {
     expect(result.content).toContain('it("resolves to 1", async () => {');
   });
 
-  it("fails clearly when nothing in the file can be tested yet", async () => {
+  it("fails clearly when the file exports no functions", async () => {
+    const file = path.join(dir, "constants.ts");
+    await writeFile(file, "export const LIMIT = 10;\n");
     const provider = new FakeProvider({ suites: [] });
-    const source = await validateSourceFile("fixtures/analyzer/component.tsx", root);
 
-    await expect(generateTests({ source, provider })).rejects.toThrow(GenerationError);
+    await expect(generateTests({ source: await validateSourceFile(file), provider })).rejects.toThrow(GenerationError);
     expect(provider.requests).toHaveLength(0);
   });
 

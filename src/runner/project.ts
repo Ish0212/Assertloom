@@ -49,14 +49,19 @@ function bundledJestBin(): string {
   return bin;
 }
 
+/** Whether this Node.js can import TypeScript files directly (type stripping), as Jest config wrappers do. */
+export function nodeStripsTypes(): boolean {
+  return !!(process.features as { typescript?: unknown }).typescript;
+}
+
 export function detectJestSetup(sourcePath: string): JestSetup {
   const root = findProjectRoot(sourcePath);
   const notes: string[] = [];
   let config: JestConfigSource = { kind: "default" };
 
   const configFile = CONFIG_FILES.map((name) => path.join(root, name)).find((file) => existsSync(file));
-  if (configFile && /\.[cm]?ts$/.test(configFile)) {
-    notes.push(`${path.basename(configFile)} is not supported yet; using Assertloom's default Jest config.`);
+  if (configFile && /\.[cm]?ts$/.test(configFile) && !nodeStripsTypes()) {
+    notes.push(`${path.basename(configFile)} needs Node.js 22.18 or newer to load; using Assertloom's default Jest config.`);
   } else if (configFile) {
     config = { kind: "file", path: configFile };
   } else {

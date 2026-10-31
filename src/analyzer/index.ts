@@ -3,6 +3,7 @@ import type { FileAnalysis, SourceFile } from "../types/index.js";
 import { scanImports, summarizeDependencies } from "./dependencies.js";
 import { extractFunctions } from "./functions.js";
 import { parseSource } from "./parser.js";
+import { collectImportUsage } from "./usage.js";
 
 export { ParseError, parseSource } from "./parser.js";
 
@@ -15,6 +16,7 @@ export function analyzeSource(code: string, source: Pick<SourceFile, "inputPath"
     scan.imports.some((i) => i.kind === "import" || i.kind === "re-export") ||
     ast.program.body.some((s) => s.type === "ExportNamedDeclaration" || s.type === "ExportDefaultDeclaration");
   const usesCommonJs = scan.usesCommonJsExports || scan.imports.some((i) => i.kind === "require");
+  const { importUsage, globals } = collectImportUsage(ast);
 
   return {
     file: source.inputPath.replaceAll("\\", "/"),
@@ -22,6 +24,8 @@ export function analyzeSource(code: string, source: Pick<SourceFile, "inputPath"
     moduleSystem: usesEsm && usesCommonJs ? "mixed" : usesEsm ? "esm" : usesCommonJs ? "commonjs" : "none",
     functions: extractFunctions(ast, code, scan),
     imports: scan.imports,
+    importUsage,
+    globals,
     dependencies: summarizeDependencies(scan.imports),
   };
 }

@@ -206,6 +206,28 @@ describe.concurrent("runJest (real Jest runs)", { timeout: 180_000 }, () => {
     expect(result.coverage).toEqual({ lines: 100, statements: 100, functions: 100, branches: 100 });
   });
 
+  it("loads a TypeScript Jest config", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "assertloom-tsconfig-"));
+    try {
+      await writeFile(path.join(dir, "package.json"), '{ "name": "ts-config-project" }\n');
+      await writeFile(
+        path.join(dir, "jest.config.ts"),
+        'import type { Config } from "jest";\n\nconst config: Config = { testEnvironment: "node", globals: { FROM_TS_CONFIG: true } };\n\nexport default config;\n',
+      );
+      await copyFile(fixture("with-config", "sum.cjs"), path.join(dir, "sum.cjs"));
+      await writeFile(
+        path.join(dir, "sum.test.preview.cjs"),
+        'const { sum } = require("./sum.cjs");\nit("sees the config", () => {\n  expect(globalThis.FROM_TS_CONFIG).toBe(true);\n  expect(sum([1, 2])).toBe(3);\n});\n',
+      );
+
+      const result = await runJest({ testPath: path.join(dir, "sum.test.preview.cjs"), sourcePath: path.join(dir, "sum.cjs") });
+
+      expect(result).toMatchObject({ status: "passed", passed: 1, setup: expect.stringContaining("jest.config.ts") });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("runs generated tests end to end: model output → preview file → Jest → coverage", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "assertloom-e2e-"));
     try {

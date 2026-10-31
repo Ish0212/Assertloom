@@ -14,7 +14,7 @@
  * | average › averages values                  | passes                             |            | must keep passing                            |
  * | average › returns 0 for an empty list      | source returns NaN (a real bug)    | assertion  | skipped as a suspected source bug            |
  * | slowDouble › doubles a number              | missing await (received a Promise) | assertion  | fixed in attempt 1 with await                |
- * | fetchRate › returns the rate               | network call refused               | mock       | not sent to the model; skipped (needs mocks) |
+ * | fetchRate › returns the rate               | fetch mock never configured        | assertion  | fixed in attempt 1 (mockResolvedValue)       |
  */
 import type { Generation } from "../../src/generator/schema.js";
 import type { RepairResponse } from "../../src/repair/schema.js";
@@ -104,6 +104,13 @@ export const repairsByAttempt: Record<number, RepairResponse> = {
         action: "fix",
         body: "await expect(slowDouble(2)).resolves.toBe(4);",
         reason: "slowDouble is async; the test must await the result.",
+      },
+      {
+        functionName: "fetchRate",
+        name: "returns the rate",
+        action: "fix",
+        body: 'jest.mocked(fetch).mockResolvedValue({ json: async () => ({ rate: 1.1 }) } as any);\nawait expect(fetchRate("EUR")).resolves.toBe(1.1);',
+        reason: "fetch is mocked and returns undefined until configured.",
       },
     ],
   },

@@ -67,6 +67,15 @@ describe("failure classification", () => {
     expect(classifyTestFailure(failed("error", "Cannot find module './db'"))).toEqual({ category: "import", repairable: false });
   });
 
+  it("treats failures involving Assertloom's own mocks as repairable test bugs", () => {
+    const callMismatch = 'expect(jest.fn()).toHaveBeenCalledWith(...expected)\nExpected: "/app/settings.json"\nReceived: "\\\\app\\\\settings.json"';
+    expect(classifyTestFailure(failed("assertion", callMismatch))).toEqual({ category: "assertion", repairable: true });
+    expect(classifyTestFailure(failed("error", "TypeError: Cannot read properties of undefined (reading 'rows')"))).toEqual({
+      category: "runtime",
+      repairable: true,
+    });
+  });
+
   it("treats whole-file failures as import or configuration problems", () => {
     expect(classifyInfraFailure({ kind: "module-not-found", message: "" })).toEqual({ category: "import", repairable: false });
     expect(classifyInfraFailure({ kind: "transform", message: "" })).toEqual({ category: "configuration", repairable: false });
@@ -93,7 +102,7 @@ describe("repairTests (scripted runner)", () => {
       { binding: plan.bindings[0], cases: [{ name: "A", category: "normal", body: "expect(add(1, 1)).toBe(2);", async: false }] },
       { binding: plan.bindings[1], cases: [{ name: "B", category: "normal", body: "expect(divide(4, 2)).toBe(3);", async: false }] },
     ];
-    base = { analysis, promptSource: "SOURCE", sourcePath, testPath, extension: ".ts", importStatements: plan.statements, suites };
+    base = { analysis, promptSource: "SOURCE", sourcePath, testPath, extension: ".ts", preamble: plan.statements, suites };
   });
 
   afterEach(async () => {
@@ -251,19 +260,22 @@ describe("documented repair scenario (real Jest)", { timeout: 300_000 }, () => {
         sourcePath,
         testPath: generated.testPath,
         extension: source.extension,
-        importStatements: generated.importStatements,
+        preamble: generated.preamble,
+        mockSummary: generated.mocks.summary,
         suites: generated.suites,
         initialRun,
       });
 
       expect(result.attempts.map((a) => [a.requested, a.changes.length, a.invalid.length, a.after?.passed, a.regressed])).toEqual([
-        [6, 5, 1, 7, false],
-        [1, 1, 0, 8, false],
+        [7, 6, 1, 8, false],
+        [1, 1, 0, 9, false],
       ]);
       expect(result.attempts[0].changes.find((c) => c.name === "returns 0 for an empty list")?.action).toBe("skip");
-      expect(result.gaveUp.map((c) => [c.name, c.reason])).toEqual([["returns the rate", "needs mocking, which Assertloom does not generate yet"]]);
-      expect(result.stopReason).toBe("unrepairable");
-      expect(result.final).toMatchObject({ status: "passed", passed: 8, failed: 0, skipped: 2 });
+      expect(result.gaveUp).toEqual([]);
+      expect(result.stopReason).toBe("all-passing");
+      expect(result.final).toMatchObject({ status: "passed", passed: 9, failed: 0, skipped: 1 });
+      expect(result.content).toContain("globalThis.fetch = jest.fn() as unknown as typeof fetch;");
+      expect(provider.requests[1].prompt).toContain("global `fetch` is a jest.fn() mock");
       expect(result.content).toContain("// Assertloom skipped this test: suspected bug in the source: average([]) divides by zero");
       expect(result.content).toContain('it("doubles a number", async () => {');
       expect(result.sourceUnchanged).toBe(true);

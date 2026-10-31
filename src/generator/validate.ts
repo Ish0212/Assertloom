@@ -10,6 +10,12 @@ export const MAX_CASES_PER_FUNCTION = 12;
 const MAX_BODY_LENGTH = 4000;
 const MAX_NAME_LENGTH = 200;
 
+/** Module-level mocking is Assertloom's job; these would also load real modules or bypass the mocks. */
+const FORBIDDEN_JEST_METHODS = new Set([
+  "mock", "doMock", "unmock", "dontMock", "requireActual", "requireMock", "createMockFromModule",
+  "enableAutomock", "disableAutomock", "resetModules", "isolateModules", "isolateModulesAsync",
+]);
+
 export interface AcceptedCase extends GeneratedTestCase {
   async: boolean;
   /** Set when the repair loop gives up on a case; rendered as `it.skip` with this reason. */
@@ -64,7 +70,7 @@ export function checkBody(body: string, extension: SupportedExtension): { error:
       if (callee.type === "Identifier" && callee.name === "require") problem = "uses require()";
       if (rootIdentifier(callee) === "jest" || rootIdentifier(callee) === "vi") {
         const member = callee.type === "MemberExpression" && callee.property.type === "Identifier" ? callee.property.name : "";
-        if (member === "mock" || member === "doMock" || member === "unmock") problem = "calls jest.mock()";
+        if (FORBIDDEN_JEST_METHODS.has(member)) problem = `calls jest.${member}()`;
       }
       if (callee.type === "MemberExpression" && rootIdentifier(callee) === "process") problem = "calls a process method";
     },

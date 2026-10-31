@@ -37,7 +37,34 @@ export interface FunctionInfo {
   throws: boolean;
   /** Import sources referenced inside the function body. */
   dependencies: string[];
+  /** Mockable globals referenced inside the function body, such as `fetch`. */
+  globals: string[];
   line: number;
+}
+
+/** How the source uses an imported value. Assertloom builds mocks from this. */
+export interface UsageShape {
+  called: boolean;
+  constructed: boolean;
+  /** Used on the right-hand side of `instanceof`. */
+  instanceOf: boolean;
+  /** Properties read from the value. */
+  members: Record<string, UsageShape>;
+  /** How the value returned by a call or `new` is used, when it is kept. */
+  result?: UsageShape;
+  /** Variables the result is stored in, e.g. `pool` for `const pool = new Pool()`. */
+  resultNames: string[];
+  /** The result is stored in a top-level variable, so it is created when the module loads. */
+  createdAtLoad: boolean;
+}
+
+export interface ImportUsage {
+  source: string;
+  local: string;
+  /** `"default"`, `"*"` (namespace or whole CommonJS module), or an export name. */
+  imported: string;
+  style: "esm" | "commonjs";
+  shape: UsageShape;
 }
 
 export type ImportCategory = "local" | "external" | "builtin";
@@ -72,5 +99,9 @@ export interface FileAnalysis {
   moduleSystem: "esm" | "commonjs" | "mixed" | "none";
   functions: FunctionInfo[];
   imports: ImportInfo[];
+  /** One entry per imported binding, with how the source uses it. */
+  importUsage: ImportUsage[];
+  /** Mockable globals the file references, such as `fetch`. */
+  globals: string[];
   dependencies: DependencySummary;
 }

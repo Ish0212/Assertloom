@@ -19,6 +19,18 @@ interface GenerateOptions {
   repair: boolean;
   maxAttempts: string;
   report?: string;
+  mock: string[];
+  keepReal: string[];
+}
+
+const collect = (value: string, previous: string[]) => [...previous, value];
+
+function printMocks(result: GenerationResult): void {
+  const { mocked, real, globals } = result.mocks;
+  const names = [...mocked.map((m) => m.source), ...globals.map((g) => `global ${g}`)];
+  if (names.length) console.log(`✓ Mocked ${names.length} ${names.length === 1 ? "dependency" : "dependencies"}: ${names.join(", ")}`);
+  for (const m of mocked) console.log(`  - ${m.source}: ${m.reason}${m.virtual ? " (virtual mock)" : ""}`);
+  if (real.length) console.log(`  Kept real: ${real.map((r) => `${r.source} (${r.reason})`).join(", ")}`);
 }
 
 function relative(file: string): string {
@@ -60,6 +72,7 @@ function buildReport(file: string, generation: GenerationResult, run: RunResult,
   return {
     file,
     model: generation.model,
+    mocks: { mocked: generation.mocks.mocked, real: generation.mocks.real, globals: generation.mocks.globals },
     generated: generation.suites.reduce((n, s) => n + s.cases.length, 0),
     rejected: generation.rejected,
     initial: repair?.initial ?? summarize(run),
@@ -88,6 +101,8 @@ export function registerGenerateCommand(program: Command): void {
     .option("--no-repair", "do not try to repair failing tests")
     .option("--max-attempts <n>", `repair rounds, 0-${MAX_REPAIR_ATTEMPTS}`, String(MAX_REPAIR_ATTEMPTS))
     .option("--report <file>", "write before/after results of every run and repair round as JSON")
+    .option("--mock <module>", "mock this import even if Assertloom would keep it real (repeatable)", collect, [])
+    .option("--keep-real <module>", "do not mock this import (repeatable)", collect, [])
     .option("--force", "overwrite an existing test file that Assertloom did not generate")
     .action(async (file: string, options: GenerateOptions) => {
       const maxAttempts = Number(options.maxAttempts);
@@ -99,7 +114,7 @@ export function registerGenerateCommand(program: Command): void {
       const testPath = options.out ? path.resolve(options.out) : undefined;
 
       console.log(`Generating tests for ${source.inputPath} with ${provider.name} (${provider.model})...`);
-      const result = await generateTests({ source, provider, testPath });
+      const result = await generateTests({ source, provider, testPath, mock: options.mock, keepReal: options.keepReal });
 
       const exported = result.analysis.functions.filter((f) => f.exported).length;
       const caseCount = result.suites.reduce((n, s) => n + s.cases.length, 0);
@@ -107,7 +122,7 @@ export function registerGenerateCommand(program: Command): void {
         result.suites.reduce((n, s) => n + s.cases.filter((c) => c.category === category).length, 0);
 
       console.log(`✓ Analyzed ${exported} exported functions (${result.suites.length} tested)`);
-      for (const { fn, reason } of result.skipped) console.log(`  - skipped ${fn.name}: ${reason}`);
+      printMocks(result);
       if (result.redactions) console.log(`✓ Redacted ${result.redactions} likely secrets before sending`);
       console.log(
         `✓ Generated ${caseCount} test cases (${byCategory("normal")} normal, ${byCategory("edge")} edge, ${byCategory("error")} error)`,
@@ -139,7 +154,8 @@ export function registerGenerateCommand(program: Command): void {
           sourcePath: source.absolutePath,
           testPath: result.testPath,
           extension: source.extension,
-          importStatements: result.importStatements,
+          preamble: result.preamble,
+          mockSummary: result.mocks.summary,
           suites: result.suites,
           initialRun: run,
           maxAttempts,

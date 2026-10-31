@@ -17,7 +17,7 @@ function signature(fn: FunctionInfo): string {
   const notes = [
     alias.length ? `exported as ${alias.join(", ")}` : "",
     fn.throws ? "throws" : "",
-    fn.dependencies.length ? `uses ${fn.dependencies.join(", ")}` : "",
+    fn.dependencies.length || fn.globals.length ? `uses ${[...fn.dependencies, ...fn.globals.map((g) => `global ${g}`)].join(", ")}` : "",
   ].filter(Boolean);
   return `${formatSignature(fn)}${notes.length ? `  [${notes.join("; ")}]` : ""}`;
 }

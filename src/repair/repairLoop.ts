@@ -64,7 +64,9 @@ export interface RepairOptions {
   sourcePath: string;
   testPath: string;
   extension: SupportedExtension;
-  importStatements: string[];
+  preamble: string[];
+  /** Description of the mocks, as given to the model when generating. */
+  mockSummary?: string;
   suites: ValidatedSuite[];
   initialRun: RunResult;
   maxAttempts?: number;
@@ -134,7 +136,7 @@ export async function repairTests(options: RepairOptions): Promise<RepairResult>
   const render = (suites: ValidatedSuite[]) =>
     renderTestFile({
       sourceFile: options.analysis.file,
-      importStatements: options.importStatements,
+      preamble: options.preamble,
       suites,
       extension: options.extension,
     });
@@ -189,7 +191,13 @@ export async function repairTests(options: RepairOptions): Promise<RepairResult>
 
     const response = await options.provider.generateStructured({
       system: REPAIR_SYSTEM_PROMPT,
-      prompt: buildRepairPrompt({ analysis: options.analysis, code: options.promptSource, targets: repairTargets, attempt: attempt.attempt }),
+      prompt: buildRepairPrompt({
+        analysis: options.analysis,
+        code: options.promptSource,
+        targets: repairTargets,
+        attempt: attempt.attempt,
+        mockSummary: options.mockSummary,
+      }),
       schema: RepairSchema,
       schemaName: "assertloom_repairs",
       maxOutputTokens: MAX_OUTPUT_TOKENS,
@@ -271,7 +279,7 @@ export async function repairTests(options: RepairOptions): Promise<RepairResult>
         const testCase = suites[f.suiteIndex].cases[f.caseIndex];
         const reason =
           f.category === "mock"
-            ? "needs mocking, which Assertloom does not generate yet"
+            ? "reaches a real dependency that is not mocked (rerun with --mock <module>)"
             : `still failing after repair (${f.category}): ${firstLine(f.outcome.failure?.message ?? "")}`;
         testCase.skipReason = reason;
         gaveUp.push({ functionName: suites[f.suiteIndex].binding.binding, name: testCase.name, action: "gave-up", reason });

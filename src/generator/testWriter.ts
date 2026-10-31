@@ -31,7 +31,8 @@ function indent(text: string, spaces: number): string {
 
 export function renderTestFile(options: {
   sourceFile: string;
-  importStatements: string[];
+  /** Mocks, imports, and setup that precede the describe blocks. */
+  preamble: string[];
   suites: ValidatedSuite[];
   extension: SupportedExtension;
 }): string {
@@ -46,7 +47,7 @@ export function renderTestFile(options: {
 
   const content = [
     `${GENERATED_HEADER} Source: ${options.sourceFile}. Review before committing.`,
-    ...options.importStatements,
+    ...options.preamble,
     "",
     blocks.join("\n\n"),
     "",

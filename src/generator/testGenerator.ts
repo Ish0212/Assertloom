@@ -5,8 +5,9 @@ import type { LLMProvider, TokenUsage } from "../ai/provider.js";
 import { redactSecrets } from "../ai/redact.js";
 import { analyzeSource } from "../analyzer/index.js";
 import { UserError } from "../errors.js";
-import type { FileAnalysis, FunctionInfo, SourceFile } from "../types/index.js";
+import type { FileAnalysis, SourceFile } from "../types/index.js";
 import { planImports } from "./importPlan.js";
+import { planMocks, type MockPlan } from "./mocks.js";
 import { GenerationSchema } from "./schema.js";
 import { previewPathFor, renderTestFile } from "./testWriter.js";
 import { validateGeneration, type RejectedCase, type ValidatedSuite } from "./validate.js";
@@ -16,72 +17,63 @@ export class GenerationError extends UserError {}
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_OUTPUT_TOKENS = 32_000;
 
-/** Built-ins that are deterministic and side-effect free, so tests don't need to mock them. */
-const PURE_BUILTINS = new Set(["assert", "buffer", "path", "path/posix", "path/win32", "querystring", "string_decoder", "url", "util"]);
-
-export interface SkippedFunction {
-  fn: FunctionInfo;
-  reason: string;
-}
-
 export interface GenerationResult {
   analysis: FileAnalysis;
   testPath: string;
   content: string;
-  importStatements: string[];
+  /** Mocks, imports, and setup that precede the describe blocks. */
+  preamble: string[];
+  mocks: MockPlan;
   suites: ValidatedSuite[];
   /** The source as sent to the model, with secrets redacted. */
   promptSource: string;
-  skipped: SkippedFunction[];
   rejected: RejectedCase[];
   model: string;
   usage: TokenUsage;
   redactions: number;
 }
 
-/** Exported functions Week 3 can test without mocks, and the ones it has to skip. */
-export function selectTestable(analysis: FileAnalysis): { testable: FunctionInfo[]; skipped: SkippedFunction[] } {
-  const testable: FunctionInfo[] = [];
-  const skipped: SkippedFunction[] = [];
-
-  for (const fn of analysis.functions) {
-    if (!fn.exported) continue;
-    const impure = fn.dependencies.filter((dep) => !PURE_BUILTINS.has(dep.replace(/^node:/, "")));
-    if (impure.length) {
-      skipped.push({ fn, reason: `uses ${impure.join(", ")} (needs mocking)` });
-    } else {
-      testable.push(fn);
-    }
-  }
-
-  return { testable, skipped };
-}
-
 export async function generateTests(options: {
   source: SourceFile;
   provider: LLMProvider;
   testPath?: string;
+  /** Modules to mock even if Assertloom would keep them real. */
+  mock?: string[];
+  /** Modules to keep real even if Assertloom would mock them. */
+  keepReal?: string[];
 }): Promise<GenerationResult> {
   const { source, provider } = options;
   const testPath = options.testPath ?? previewPathFor(source.absolutePath);
   const code = await readFile(source.absolutePath, "utf8");
   const analysis = analyzeSource(code, source);
-  const { testable, skipped } = selectTestable(analysis);
+  const targets = analysis.functions.filter((fn) => fn.exported);
 
-  if (testable.length === 0) {
-    const detail = skipped.length ? ` Skipped: ${skipped.map((s) => `${s.fn.name} ${s.reason}`).join("; ")}.` : "";
-    throw new GenerationError(`No testable exported functions in ${analysis.file}.${detail}`);
-  }
+  if (targets.length === 0) throw new GenerationError(`No exported functions in ${analysis.file}.`);
   if (code.length > MAX_SOURCE_CHARS) {
     throw new GenerationError(`${analysis.file} is ${code.length} characters; the limit for sending to a model is ${MAX_SOURCE_CHARS}.`);
   }
 
-  const plan = planImports(analysis, testable, source.absolutePath, testPath);
+  const plan = planImports(analysis, targets, source.absolutePath, testPath);
+  const mocks = await planMocks({
+    analysis,
+    sourcePath: source.absolutePath,
+    testPath,
+    extension: source.extension,
+    reserved: plan.bindings.map((b) => b.binding),
+    mock: options.mock,
+    keepReal: options.keepReal,
+  });
   const redacted = redactSecrets(code);
 
   const response = await provider.generateStructured({
     system: GENERATION_SYSTEM_PROMPT,
-    prompt: buildGenerationPrompt({ analysis, code: redacted.code, bindings: plan.bindings, testFileName: path.basename(testPath) }),
+    prompt: buildGenerationPrompt({
+      analysis,
+      code: redacted.code,
+      bindings: plan.bindings,
+      testFileName: path.basename(testPath),
+      mockSummary: mocks.summary,
+    }),
     schema: GenerationSchema,
     schemaName: "assertloom_tests",
     maxOutputTokens: MAX_OUTPUT_TOKENS,
@@ -92,21 +84,19 @@ export async function generateTests(options: {
     throw new GenerationError(`The model returned no usable test cases (${rejected.length} rejected).`);
   }
 
-  const content = renderTestFile({
-    sourceFile: analysis.file,
-    importStatements: plan.statements,
-    suites,
-    extension: source.extension,
-  });
+  const preamble = [...mocks.imports, ...plan.statements];
+  if (mocks.setup.length) preamble.push("", mocks.setup.join("\n\n"));
+
+  const content = renderTestFile({ sourceFile: analysis.file, preamble, suites, extension: source.extension });
 
   return {
     analysis,
     testPath,
     content,
-    importStatements: plan.statements,
+    preamble,
+    mocks,
     suites,
     promptSource: redacted.code,
-    skipped,
     rejected,
     model: response.model,
     usage: response.usage,
