@@ -2,7 +2,11 @@
 
 Assertloom is an open-source CLI that reads a JavaScript or TypeScript file, generates Jest unit tests for it, runs them, repairs the ones that fail, and reports coverage. It doesn't assume generated tests are correct. Every test is run before it is kept.
 
-> **Status: Week 7, evaluation and hardening.** `analyze` statically extracts functions, dependencies, and how each import is used. `generate` writes Jest tests for every exported function, mocks the dependencies that do I/O (packages, databases, the file system, `fetch`), runs the tests with network access blocked, and repairs failing tests in up to three rounds within a spending limit. `run` reports pass/fail counts and coverage for any test file. On 9 files from 9 open-source packages, 98.7% of the kept tests pass and mean line coverage goes from 0% to 95%, for $0.07 in total ([benchmark](#benchmark)).
+![Terminal recording: npx assertloom generate src/rates.js mocks fetch, generates 8 tests, runs them with the network blocked, and saves them with 100% coverage](docs/demo.svg)
+
+<sub>A real session on [`examples/sample-project`](examples/sample-project/README.md), recorded with `scripts/record-demo.mjs` (pauses for the model shortened to 2 seconds). The raw recording is in `docs/demo.cast` and plays with `asciinema play docs/demo.cast`.</sub>
+
+> **Status: 0.1.0, first public release.** `analyze` statically extracts functions, dependencies, and how each import is used. `generate` writes Jest tests for every exported function, mocks the dependencies that do I/O (packages, databases, the file system, `fetch`), runs the tests with network access blocked, and repairs failing tests in up to three rounds within a spending limit. `run` reports pass/fail counts and coverage for any test file. On 9 files from 9 open-source packages, 98.7% of the kept tests pass and mean line coverage goes from 0% to 95%, for $0.07 in total ([benchmark](#benchmark)).
 
 ## Install
 
@@ -306,8 +310,10 @@ src/
   runner/      Jest setup detection, isolated Jest runs, result parsing, coverage
   repair/      Failure classification and the repair loop
   types/       Shared types
-bench/        Benchmark targets, runner, and published results
-examples/      Sample source files
+bench/         Benchmark targets, runner, and published results
+docs/          Terminal demo recording
+examples/      Sample source files and sample-project/
+scripts/       Demo recorder
 fixtures/      Inputs for Assertloom's own tests
 tests/         Assertloom's own tests (Vitest)
 ```
@@ -328,15 +334,14 @@ Generated tests run as normal Node code on your machine; the network guard and t
 
 ## Roadmap
 
-1. CLI foundation (done)
-2. AST code analyzer (done)
-3. AI test generation (done)
-4. Execution engine (done)
-5. Self-repair engine (done)
-6. Dependency mocking (done)
-7. Evaluation and hardening (done)
-8. Open-source release
+All eight milestones are done: CLI foundation, AST analyzer, AI test generation, execution engine, self-repair, dependency mocking, evaluation and hardening, and the open-source release. [ROADMAP.md](ROADMAP.md) lists what comes next, starting with the weak spots the benchmark found. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
+## Contributing
+
+Bug reports, benchmark results on other projects, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and guidelines, and [SECURITY.md](SECURITY.md) for reporting vulnerabilities privately.
+
+Releases are published to npm by the [release workflow](.github/workflows/release.yml) when a `v*` tag is pushed, with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) linking each version to the commit and workflow run that built it.
 
 ## License
 
-MIT
+[MIT](LICENSE)

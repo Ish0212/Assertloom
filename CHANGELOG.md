@@ -19,3 +19,8 @@ First public release.
 - Cost tracking in output and `--report` JSON.
 - Benchmark harness (`npm run bench`) over nine pinned open-source packages, with published results.
 - Sample project in `examples/sample-project`.
+
+### Fixed
+
+- Jest runs on files outside any npm project. Jest 30 also resolves a config from its working directory and failed when none existed.
+- Coverage is found when the source path goes through a symlink or a Windows short name (macOS temp directories, CI runners).
