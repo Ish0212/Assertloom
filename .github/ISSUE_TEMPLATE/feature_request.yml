@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest a feature or a kind of code Assertloom should handle.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The problem or use case, not just the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Assertloom to do?
+  - type: textarea
+    id: example
+    attributes:
+      label: Example code
+      description: A source file where Assertloom falls short today, if relevant.
+      render: typescript
+  - type: checkboxes
+    id: roadmap
+    attributes:
+      label: Roadmap
+      options:
+        - label: I checked [ROADMAP.md](https://github.com/Ish0212/Assertloom/blob/main/ROADMAP.md) and this isn't already planned.

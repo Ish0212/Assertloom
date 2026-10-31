@@ -4,19 +4,28 @@ Assertloom is an open-source CLI that reads a JavaScript or TypeScript file, gen
 
 > **Status: Week 7, evaluation and hardening.** `analyze` statically extracts functions, dependencies, and how each import is used. `generate` writes Jest tests for every exported function, mocks the dependencies that do I/O (packages, databases, the file system, `fetch`), runs the tests with network access blocked, and repairs failing tests in up to three rounds within a spending limit. `run` reports pass/fail counts and coverage for any test file. On 9 files from 9 open-source packages, 98.7% of the kept tests pass and mean line coverage goes from 0% to 95%, for $0.07 in total ([benchmark](#benchmark)).
 
-## Requirements
+## Install
 
-- Node.js 22 or newer
+Assertloom needs Node.js 22 or newer and, for `generate`, an [OpenAI API key](https://platform.openai.com/api-keys).
+
+```bash
+npm install --save-dev assertloom
+export OPENAI_API_KEY=sk-...          # PowerShell: $env:OPENAI_API_KEY = "sk-..."
+
+npx assertloom generate src/utils.ts
+```
+
+You can also run it without installing: `npx assertloom@latest generate src/utils.ts`. Your project doesn't need Jest; Assertloom brings its own and uses your Jest and config if you have them.
+
+To see it work on a prepared project first, follow [`examples/sample-project`](examples/sample-project/README.md). It walks through pure logic, an HTTP client with `fetch`, and file system code.
 
 ## Run from source
 
 ```bash
-git clone <repo-url> assertloom
-cd assertloom
+git clone https://github.com/Ish0212/Assertloom.git
+cd Assertloom
 npm install
 
-npx tsx src/cli/index.ts analyze examples/math.ts
-# or
 npm run dev -- analyze examples/math.ts
 ```
 
@@ -59,10 +68,12 @@ export OPENAI_API_KEY=sk-...
 ```
 
 ```bash
-npx tsx src/cli/index.ts generate examples/strings.ts
-npx tsx src/cli/index.ts generate examples/math.ts --dry-run       # print instead of writing
-npx tsx src/cli/index.ts generate examples/math.ts --model gpt-5.4  # pick a model
+npx assertloom generate examples/strings.ts
+npx assertloom generate examples/math.ts --dry-run        # print instead of writing
+npx assertloom generate examples/math.ts --model gpt-5.4  # pick a model
 ```
+
+From a source checkout, use `npm run dev -- generate ...` instead of `npx assertloom generate ...`.
 
 The default model is `gpt-5.4-mini`. Override it with `--model` or `ASSERTLOOM_MODEL`.
 
@@ -181,7 +192,7 @@ Use `--report <file>` to save JSON with the results of the first run, every repa
 `run` executes any test file and reports results and coverage for its source file, which is inferred from the name (`math.test.preview.ts` → `math.ts`) or passed with `--source`.
 
 ```bash
-npx tsx src/cli/index.ts run fixtures/runner/failing.test.preview.ts --source fixtures/runner/calc.ts
+npx assertloom run fixtures/runner/failing.test.preview.ts --source fixtures/runner/calc.ts
 ```
 
 ```

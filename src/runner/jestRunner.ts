@@ -5,7 +5,7 @@ import path from "node:path";
 import { readCoverage } from "./coverage.js";
 import { writeRunConfig } from "./jestConfig.js";
 import { writeNetworkGuard } from "./networkGuard.js";
-import { detectJestSetup, type JestSetup } from "./project.js";
+import { detectJestSetup, jestCanStartIn, type JestSetup } from "./project.js";
 import { cleanMessage, parseJestReport, type JestJsonReport } from "./results.js";
 import type { RunResult } from "./types.js";
 
@@ -112,7 +112,8 @@ export async function runJest(options: RunOptions): Promise<RunResult> {
         "--coverage",
         `--testTimeout=${options.testTimeoutMs ?? DEFAULT_TEST_TIMEOUT_MS}`,
       ],
-      { cwd: setup.root, timeoutMs, env },
+      // runDir holds the generated config, so Jest can always find one there.
+      { cwd: jestCanStartIn(setup.root) ? setup.root : runDir, timeoutMs, env },
     );
 
     const durationMs = Date.now() - started;

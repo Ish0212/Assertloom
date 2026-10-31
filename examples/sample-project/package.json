@@ -1,0 +1,13 @@
+{
+  "name": "assertloom-sample-project",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A small project to try Assertloom on: pure logic, an HTTP client, and file I/O.",
+  "type": "module",
+  "scripts": {
+    "generate": "assertloom generate src/cart.js && assertloom generate src/rates.js && assertloom generate src/config.js"
+  },
+  "devDependencies": {
+    "assertloom": "^0.1.0"
+  }
+}

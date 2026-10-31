@@ -35,6 +35,17 @@ export function findProjectRoot(fromFile: string): string {
   }
 }
 
+/**
+ * Jest 30 also resolves a config from its working directory when `--config` is given, and exits
+ * with "Could not find a config file" if no Jest config or package.json exists there or above.
+ */
+export function jestCanStartIn(dir: string): boolean {
+  for (let current = path.resolve(dir); ; current = path.dirname(current)) {
+    if ([...CONFIG_FILES, "package.json"].some((name) => existsSync(path.join(current, name)))) return true;
+    if (path.dirname(current) === current) return false;
+  }
+}
+
 function resolveJestBin(require: NodeJS.Require): string | undefined {
   try {
     return path.join(path.dirname(require.resolve("jest/package.json")), "bin", "jest.js");
