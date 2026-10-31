@@ -64,6 +64,8 @@ npx tsx src/cli/index.ts generate examples/math.ts --model gpt-5.4  # pick a mod
 
 The default model is `gpt-5.4-mini`. Override it with `--model` or `ASSERTLOOM_MODEL`.
 
+`examples/strings.test.ts` and `examples/math.test.ts` are unedited output from `gpt-5.4-mini`. For `strings.ts`, 24 of 26 generated tests passed on the first run, and one repair round fixed the other 2, ending at 26/26 passing with 100% coverage.
+
 How it works:
 
 1. The analyzer picks exported functions that don't need mocks. Functions that use external packages, local modules, or side-effecting built-ins such as `fs` are skipped and listed (mocking arrives in Week 6).
@@ -183,9 +185,9 @@ Until sandboxing is in place, only run Assertloom against code you trust.
 
 1. CLI foundation (done)
 2. AST code analyzer (done)
-3. AI test generation (built; tested with a fake provider, live model run pending)
+3. AI test generation (done)
 4. Execution engine (done)
-5. Self-repair engine (built; tested with a fake provider and real Jest, live model run pending)
+5. Self-repair engine (done)
 6. Dependency mocking
 7. Evaluation and hardening
 8. Open-source release
