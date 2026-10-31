@@ -1,0 +1,499 @@
+{
+  "meta": {
+    "Date": "2026-10-31",
+    "Assertloom": "0.1.0",
+    "Model": "gpt-5.4-mini",
+    "Prices": "OpenAI standard rates checked 2026-10-31",
+    "Node": "v24.11.1",
+    "OS": "win32 x64",
+    "Spending limit": "$0.5 per file",
+    "Coverage before": "0% for every file (published npm packages ship without their tests)"
+  },
+  "totals": {
+    "files": 9,
+    "generation": {
+      "filesWithTests": 8,
+      "fileRate": 88.9,
+      "generatedCases": 84,
+      "acceptedCases": 77,
+      "caseRate": 91.7
+    },
+    "execution": {
+      "filesThatRan": 8,
+      "fileRate": 88.9,
+      "firstRunPassed": 65,
+      "firstRunTotal": 77,
+      "firstRunPassRate": 84.4
+    },
+    "repair": {
+      "initiallyFailing": 12,
+      "repaired": 11,
+      "rate": 91.7,
+      "flaggedAsSourceBugs": 0,
+      "gaveUp": 1,
+      "filesNeedingRepair": 3
+    },
+    "final": {
+      "passed": 76,
+      "total": 77,
+      "passRate": 98.7,
+      "filesAllPassing": 7
+    },
+    "coverage": {
+      "before": 0,
+      "meanLines": 95,
+      "meanBranches": 81.3
+    },
+    "runtime": {
+      "totalSeconds": 93.9,
+      "medianSecondsPerFile": 7.7
+    },
+    "cost": {
+      "totalUsd": 0.0687,
+      "meanUsdPerFile": 0.0076,
+      "tokens": {
+        "input": 35243,
+        "output": 9390
+      }
+    }
+  },
+  "results": [
+    {
+      "package": "ms@2.1.3",
+      "file": "index.js",
+      "why": "CommonJS, string parsing with many branches",
+      "exportedFunctions": 1,
+      "testedFunctions": 1,
+      "generated": 6,
+      "accepted": 6,
+      "rejected": {},
+      "mocked": [],
+      "repairAttempts": 0,
+      "flaggedAsSourceBugs": 0,
+      "gaveUp": 0,
+      "durationMs": {
+        "generation": 1708,
+        "firstRun": 2878,
+        "repair": 0,
+        "total": 6430
+      },
+      "tokens": {
+        "input": 1870,
+        "output": 255
+      },
+      "costUsd": 0.00255,
+      "initial": {
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 86.41,
+          "statements": 86.41,
+          "functions": 100,
+          "branches": 33.89
+        }
+      },
+      "stopReason": "all-passing",
+      "final": {
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 86.41,
+          "statements": 86.41,
+          "functions": 100,
+          "branches": 33.89
+        }
+      }
+    },
+    {
+      "package": "bytes@3.1.2",
+      "file": "index.js",
+      "why": "CommonJS, formatting and parsing with options",
+      "exportedFunctions": 3,
+      "testedFunctions": 3,
+      "generated": 15,
+      "accepted": 15,
+      "rejected": {},
+      "mocked": [],
+      "repairAttempts": 1,
+      "flaggedAsSourceBugs": 0,
+      "gaveUp": 0,
+      "durationMs": {
+        "generation": 2862,
+        "firstRun": 2792,
+        "repair": 5011,
+        "total": 12631
+      },
+      "tokens": {
+        "input": 4398,
+        "output": 1222
+      },
+      "costUsd": 0.0087975,
+      "initial": {
+        "status": "failed",
+        "passed": 12,
+        "failed": 3,
+        "skipped": 0,
+        "coverage": {
+          "lines": 98.23,
+          "statements": 98.23,
+          "functions": 100,
+          "branches": 93.47
+        }
+      },
+      "stopReason": "all-passing",
+      "final": {
+        "status": "passed",
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 98.23,
+          "statements": 98.23,
+          "functions": 100,
+          "branches": 93.47
+        }
+      }
+    },
+    {
+      "package": "escape-html@1.0.3",
+      "file": "index.js",
+      "why": "CommonJS, single function with a fast path",
+      "exportedFunctions": 1,
+      "testedFunctions": 1,
+      "generated": 5,
+      "accepted": 5,
+      "rejected": {},
+      "mocked": [],
+      "repairAttempts": 0,
+      "flaggedAsSourceBugs": 0,
+      "gaveUp": 0,
+      "durationMs": {
+        "generation": 1706,
+        "firstRun": 2905,
+        "repair": 0,
+        "total": 6241
+      },
+      "tokens": {
+        "input": 1257,
+        "output": 324
+      },
+      "costUsd": 0.00240075,
+      "initial": {
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 100,
+          "statements": 100,
+          "functions": 100,
+          "branches": 100
+        }
+      },
+      "stopReason": "all-passing",
+      "final": {
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 100,
+          "statements": 100,
+          "functions": 100,
+          "branches": 100
+        }
+      }
+    },
+    {
+      "package": "content-type@1.0.5",
+      "file": "index.js",
+      "why": "CommonJS, parser that throws TypeErrors",
+      "exportedFunctions": 2,
+      "testedFunctions": 2,
+      "generated": 12,
+      "accepted": 12,
+      "rejected": {},
+      "mocked": [],
+      "repairAttempts": 0,
+      "flaggedAsSourceBugs": 0,
+      "gaveUp": 0,
+      "durationMs": {
+        "generation": 2851,
+        "firstRun": 3007,
+        "repair": 0,
+        "total": 7721
+      },
+      "tokens": {
+        "input": 2404,
+        "output": 792
+      },
+      "costUsd": 0.005367,
+      "initial": {
+        "status": "passed",
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 97.33,
+          "statements": 97.33,
+          "functions": 100,
+          "branches": 91.89
+        }
+      },
+      "stopReason": "all-passing",
+      "final": {
+        "status": "passed",
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 97.33,
+          "statements": 97.33,
+          "functions": 100,
+          "branches": 91.89
+        }
+      }
+    },
+    {
+      "package": "cookie@0.7.2",
+      "file": "index.js",
+      "why": "CommonJS, parse/serialize with validation errors",
+      "exportedFunctions": 2,
+      "testedFunctions": 2,
+      "generated": 11,
+      "accepted": 11,
+      "rejected": {},
+      "mocked": [],
+      "repairAttempts": 0,
+      "flaggedAsSourceBugs": 0,
+      "gaveUp": 0,
+      "durationMs": {
+        "generation": 3143,
+        "firstRun": 2831,
+        "repair": 0,
+        "total": 7970
+      },
+      "tokens": {
+        "input": 3312,
+        "output": 859
+      },
+      "costUsd": 0.0063495,
+      "initial": {
+        "status": "passed",
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 93.73,
+          "statements": 93.73,
+          "functions": 100,
+          "branches": 82.66
+        }
+      },
+      "stopReason": "all-passing",
+      "final": {
+        "status": "passed",
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 93.73,
+          "statements": 93.73,
+          "functions": 100,
+          "branches": 82.66
+        }
+      }
+    },
+    {
+      "package": "camelcase@8.0.0",
+      "file": "index.js",
+      "why": "native ESM package (type: module)",
+      "exportedFunctions": 1,
+      "testedFunctions": 1,
+      "generated": 6,
+      "accepted": 6,
+      "rejected": {},
+      "mocked": [],
+      "repairAttempts": 0,
+      "flaggedAsSourceBugs": 0,
+      "gaveUp": 0,
+      "durationMs": {
+        "generation": 1936,
+        "firstRun": 3244,
+        "repair": 0,
+        "total": 6981
+      },
+      "tokens": {
+        "input": 1870,
+        "output": 425
+      },
+      "costUsd": 0.003315,
+      "initial": {
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 100,
+          "statements": 100,
+          "functions": 100,
+          "branches": 95.83
+        }
+      },
+      "stopReason": "all-passing",
+      "final": {
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 100,
+          "statements": 100,
+          "functions": 100,
+          "branches": 95.83
+        }
+      }
+    },
+    {
+      "package": "slugify@1.6.6",
+      "file": "slugify.js",
+      "why": "UMD wrapper instead of plain exports",
+      "exportedFunctions": 0,
+      "testedFunctions": 0,
+      "generated": 0,
+      "accepted": 0,
+      "rejected": {},
+      "mocked": [],
+      "repairAttempts": 0,
+      "flaggedAsSourceBugs": 0,
+      "gaveUp": 0,
+      "durationMs": {
+        "generation": 14,
+        "firstRun": 0,
+        "repair": 0,
+        "total": 1793
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": 0,
+      "error": "No exported functions in package/slugify.js."
+    },
+    {
+      "package": "semver@7.6.3",
+      "file": "functions/inc.js",
+      "why": "imports local modules from the same package",
+      "exportedFunctions": 1,
+      "testedFunctions": 1,
+      "generated": 6,
+      "accepted": 5,
+      "rejected": {
+        "uses require(\"../classes/semver\")": 1
+      },
+      "mocked": [],
+      "repairAttempts": 1,
+      "flaggedAsSourceBugs": 0,
+      "gaveUp": 0,
+      "durationMs": {
+        "generation": 1919,
+        "firstRun": 2929,
+        "repair": 3777,
+        "total": 10732
+      },
+      "tokens": {
+        "input": 2195,
+        "output": 452
+      },
+      "costUsd": 0.00368025,
+      "initial": {
+        "status": "failed",
+        "passed": 4,
+        "failed": 1,
+        "skipped": 0,
+        "coverage": {
+          "lines": 100,
+          "statements": 100,
+          "functions": 100,
+          "branches": 75
+        }
+      },
+      "stopReason": "all-passing",
+      "final": {
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 100,
+          "statements": 100,
+          "functions": 100,
+          "branches": 75
+        }
+      }
+    },
+    {
+      "package": "dotenv@16.4.7",
+      "file": "lib/main.js",
+      "why": "file system, os, and crypto side effects to mock",
+      "exportedFunctions": 7,
+      "testedFunctions": 6,
+      "generated": 23,
+      "accepted": 17,
+      "rejected": {
+        "does not call expect()": 1,
+        "spies on `configDotenv`, a function under test; calls inside the source file bypass spies": 1,
+        "syntax error: Unexpected token": 1,
+        "syntax error: Unexpected token, expected \",\"": 3
+      },
+      "mocked": [
+        "fs",
+        "os",
+        "crypto"
+      ],
+      "repairAttempts": 3,
+      "flaggedAsSourceBugs": 0,
+      "gaveUp": 1,
+      "durationMs": {
+        "generation": 10485,
+        "firstRun": 2742,
+        "repair": 18291,
+        "total": 33412
+      },
+      "tokens": {
+        "input": 17937,
+        "output": 5061
+      },
+      "costUsd": 0.03622725,
+      "initial": {
+        "status": "failed",
+        "passed": 9,
+        "failed": 8,
+        "skipped": 0,
+        "coverage": {
+          "lines": 65.37,
+          "statements": 65.37,
+          "functions": 64.28,
+          "branches": 44.73
+        }
+      },
+      "stopReason": "no-valid-repairs",
+      "final": {
+        "status": "passed",
+        "passed": 16,
+        "failed": 0,
+        "skipped": 1,
+        "coverage": {
+          "lines": 84.21,
+          "statements": 84.21,
+          "functions": 92.85,
+          "branches": 77.46
+        }
+      }
+    }
+  ]
+}

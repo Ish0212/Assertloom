@@ -2,6 +2,7 @@ import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { Budget } from "../src/ai/pricing.js";
 import { buildRepairPrompt, MAX_FAILURE_MESSAGE_CHARS, REPAIR_SYSTEM_PROMPT } from "../src/ai/prompts.js";
 import { analyzeFile } from "../src/analyzer/index.js";
 import { validateSourceFile } from "../src/cli/validateFile.js";
@@ -154,6 +155,19 @@ describe("repairTests (scripted runner)", () => {
     expect(provider.requests).toHaveLength(3);
     expect(result.attempts).toHaveLength(3);
     expect(result.stopReason).toBe("max-attempts");
+    expect(result.final.skipped).toBe(1);
+  });
+
+  it("stops before a repair call that could pass the spending limit", async () => {
+    const provider = new FakeProvider(fixB);
+    const runner = scriptedRunner([runOf([["add", "A", "passed"], ["divide", "B", "skipped"]])]);
+    const budget = new Budget("gpt-5.4-mini", 0.05);
+
+    const result = await repairTests({ ...base, provider, initialRun: runOf([["add", "A", "passed"], ["divide", "B", "failed"]]), runTests: runner.run, budget });
+
+    expect(provider.requests).toHaveLength(0);
+    expect(result.stopReason).toBe("budget");
+    expect(result.attempts).toHaveLength(0);
     expect(result.final.skipped).toBe(1);
   });
 

@@ -1,3 +1,4 @@
+import { NETWORK_BLOCKED_CODE, NETWORK_BLOCKED_MESSAGE } from "../runner/networkGuard.js";
 import type { InfraFailure, TestOutcome } from "../runner/index.js";
 
 export type FailureCategory = "assertion" | "runtime" | "timeout" | "mock" | "import" | "configuration";
@@ -12,7 +13,7 @@ export interface FailureClassification {
  * Errors from real sockets: the code reached a dependency that is not mocked. Problems with
  * Assertloom's mocks themselves (unconfigured return values, wrong call arguments) are test bugs.
  */
-const MOCK_SIGNALS = /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ECONNRESET|getaddrinfo|socket hang up/;
+const MOCK_SIGNALS = new RegExp(`${NETWORK_BLOCKED_MESSAGE}|${NETWORK_BLOCKED_CODE}|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ECONNRESET|getaddrinfo|socket hang up`);
 
 /** Sorts a failing test into the four repair categories (plus runtime errors and timeouts). */
 export function classifyTestFailure(outcome: TestOutcome): FailureClassification {

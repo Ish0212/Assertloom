@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promptTokens, type Budget } from "../ai/pricing.js";
 import { buildRepairPrompt, REPAIR_SYSTEM_PROMPT, type RepairTarget } from "../ai/prompts.js";
 import type { LLMProvider, TokenUsage } from "../ai/provider.js";
 import { checkBody, renderTestFile, type ValidatedSuite } from "../generator/index.js";
@@ -39,7 +40,7 @@ export interface RepairAttempt {
   usage: TokenUsage;
 }
 
-export type StopReason = "all-passing" | "max-attempts" | "regressed" | "no-valid-repairs" | "unrepairable";
+export type StopReason = "all-passing" | "max-attempts" | "regressed" | "no-valid-repairs" | "unrepairable" | "budget";
 
 export interface RepairResult {
   suites: ValidatedSuite[];
@@ -71,6 +72,9 @@ export interface RepairOptions {
   initialRun: RunResult;
   maxAttempts?: number;
   runTests?: (testPath: string) => Promise<RunResult>;
+  /** Let tests open network connections. Off by default. */
+  allowNetwork?: boolean;
+  budget?: Budget;
 }
 
 interface FailingCase {
@@ -129,7 +133,8 @@ export async function repairTests(options: RepairOptions): Promise<RepairResult>
     throw new Error("Refusing to repair: the test path is the source file.");
   }
   const maxAttempts = Math.max(0, Math.min(options.maxAttempts ?? MAX_REPAIR_ATTEMPTS, MAX_REPAIR_ATTEMPTS));
-  const runTests = options.runTests ?? ((testPath: string) => runJest({ testPath, sourcePath: options.sourcePath }));
+  const runTests =
+    options.runTests ?? ((testPath: string) => runJest({ testPath, sourcePath: options.sourcePath, allowNetwork: options.allowNetwork }));
   const originalSource = await readFile(options.sourcePath, "utf8");
   const originalHash = sha256(originalSource);
 
@@ -166,17 +171,6 @@ export async function repairTests(options: RepairOptions): Promise<RepairResult>
       break;
     }
 
-    const attempt: RepairAttempt = {
-      attempt: attempts.length + 1,
-      before: summarize(run),
-      requested: targets.length,
-      changes: [],
-      invalid: [],
-      regressed: false,
-      usage: { inputTokens: 0, outputTokens: 0 },
-    };
-    attempts.push(attempt);
-
     const repairTargets: RepairTarget[] = targets.map((t) => {
       const suite = suites[t.suiteIndex];
       const testCase = suite.cases[t.caseIndex];
@@ -189,19 +183,37 @@ export async function repairTests(options: RepairOptions): Promise<RepairResult>
       };
     });
 
+    const prompt = buildRepairPrompt({
+      analysis: options.analysis,
+      code: options.promptSource,
+      targets: repairTargets,
+      attempt: attempts.length + 1,
+      mockSummary: options.mockSummary,
+    });
+    if (options.budget && !options.budget.allows({ inputTokens: promptTokens(REPAIR_SYSTEM_PROMPT, prompt), outputTokens: MAX_OUTPUT_TOKENS })) {
+      stopReason = "budget";
+      break;
+    }
+
+    const attempt: RepairAttempt = {
+      attempt: attempts.length + 1,
+      before: summarize(run),
+      requested: targets.length,
+      changes: [],
+      invalid: [],
+      regressed: false,
+      usage: { inputTokens: 0, outputTokens: 0 },
+    };
+    attempts.push(attempt);
+
     const response = await options.provider.generateStructured({
       system: REPAIR_SYSTEM_PROMPT,
-      prompt: buildRepairPrompt({
-        analysis: options.analysis,
-        code: options.promptSource,
-        targets: repairTargets,
-        attempt: attempt.attempt,
-        mockSummary: options.mockSummary,
-      }),
+      prompt,
       schema: RepairSchema,
       schemaName: "assertloom_repairs",
       maxOutputTokens: MAX_OUTPUT_TOKENS,
     });
+    options.budget?.add(response.usage);
     attempt.usage = response.usage;
     usage.inputTokens += response.usage.inputTokens;
     usage.outputTokens += response.usage.outputTokens;
@@ -223,7 +235,7 @@ export async function repairTests(options: RepairOptions): Promise<RepairResult>
       }
 
       if (proposal.action === "fix") {
-        const check = checkBody(proposal.body, options.extension);
+        const check = checkBody(proposal.body, options.extension, new Set(suites.map((s) => s.binding.binding)));
         if ("error" in check) {
           invalid(`proposed body ${check.error}`);
           continue;
@@ -279,7 +291,7 @@ export async function repairTests(options: RepairOptions): Promise<RepairResult>
         const testCase = suites[f.suiteIndex].cases[f.caseIndex];
         const reason =
           f.category === "mock"
-            ? "reaches a real dependency that is not mocked (rerun with --mock <module>)"
+            ? "opens a real network connection; mock the dependency (--mock <module>) or rerun with --allow-network"
             : `still failing after repair (${f.category}): ${firstLine(f.outcome.failure?.message ?? "")}`;
         testCase.skipReason = reason;
         gaveUp.push({ functionName: suites[f.suiteIndex].binding.binding, name: testCase.name, action: "gave-up", reason });

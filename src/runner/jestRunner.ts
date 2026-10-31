@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { readCoverage } from "./coverage.js";
 import { writeRunConfig } from "./jestConfig.js";
+import { writeNetworkGuard } from "./networkGuard.js";
 import { detectJestSetup, type JestSetup } from "./project.js";
 import { cleanMessage, parseJestReport, type JestJsonReport } from "./results.js";
 import type { RunResult } from "./types.js";
@@ -19,6 +20,8 @@ export interface RunOptions {
   sourcePath: string;
   timeoutMs?: number;
   testTimeoutMs?: number;
+  /** Let tests open network connections. Off by default. */
+  allowNetwork?: boolean;
 }
 
 /** Environment for untrusted test code: drops anything that looks like a credential. */
@@ -44,10 +47,10 @@ function describeSetup(setup: JestSetup): string {
 function runProcess(
   command: string,
   args: string[],
-  options: { cwd: string; timeoutMs: number },
+  options: { cwd: string; timeoutMs: number; env: NodeJS.ProcessEnv },
 ): Promise<{ code: number | null; timedOut: boolean; output: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: options.cwd, env: sanitizedEnv(), windowsHide: true });
+    const child = spawn(command, args, { cwd: options.cwd, env: options.env, windowsHide: true });
     let output = "";
     let timedOut = false;
 
@@ -81,12 +84,18 @@ export async function runJest(options: RunOptions): Promise<RunResult> {
   const runDir = await mkdtemp(path.join(os.tmpdir(), "assertloom-run-"));
   const started = Date.now();
 
-  const base = { tests: [], passed: 0, failed: 0, skipped: 0, total: 0, setup: describeSetup(setup) };
+  const network = options.allowNetwork ? "network allowed" : "network blocked";
+  const base = { tests: [], passed: 0, failed: 0, skipped: 0, total: 0, setup: `${describeSetup(setup)}, ${network}` };
 
   try {
     const coverageDir = path.join(runDir, "coverage");
     const resultsPath = path.join(runDir, "results.json");
     const configPath = await writeRunConfig(setup, { testPath, sourcePath, coverageDir }, runDir);
+
+    const env = sanitizedEnv();
+    if (!options.allowNetwork) {
+      env.NODE_OPTIONS = [env.NODE_OPTIONS, await writeNetworkGuard(runDir)].filter(Boolean).join(" ");
+    }
 
     const { timedOut, output } = await runProcess(
       process.execPath,
@@ -103,7 +112,7 @@ export async function runJest(options: RunOptions): Promise<RunResult> {
         "--coverage",
         `--testTimeout=${options.testTimeoutMs ?? DEFAULT_TEST_TIMEOUT_MS}`,
       ],
-      { cwd: setup.root, timeoutMs },
+      { cwd: setup.root, timeoutMs, env },
     );
 
     const durationMs = Date.now() - started;

@@ -6,3 +6,4 @@ coverage/
 *.log
 *.test.preview.*
 !fixtures/**/*.test.preview.*
+bench/.cache/

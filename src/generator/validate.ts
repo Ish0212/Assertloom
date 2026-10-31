@@ -11,6 +11,9 @@ const MAX_BODY_LENGTH = 4000;
 const MAX_NAME_LENGTH = 200;
 
 /** Module-level mocking is Assertloom's job; these would also load real modules or bypass the mocks. */
+/** Read-only process calls; anything else (exit, kill, chdir, ...) could affect the test run itself. */
+const SAFE_PROCESS_METHODS = new Set(["cwd", "hrtime", "memoryUsage", "uptime", "nextTick", "emitWarning"]);
+
 const FORBIDDEN_JEST_METHODS = new Set([
   "mock", "doMock", "unmock", "dontMock", "requireActual", "requireMock", "createMockFromModule",
   "enableAutomock", "disableAutomock", "resetModules", "isolateModules", "isolateModulesAsync",
@@ -45,8 +48,15 @@ function rootIdentifier(node: Node): string | undefined {
   return undefined;
 }
 
+const propertyIs = (node: { property: Node }, name: string) => node.property.type === "Identifier" && node.property.name === name;
+
 /** Returns why a test body is unacceptable, or whether it needs an async callback. */
-export function checkBody(body: string, extension: SupportedExtension): { error: string } | { async: boolean } {
+export function checkBody(
+  body: string,
+  extension: SupportedExtension,
+  /** Names the target functions are imported as; they are real code, never mocks. */
+  targets: ReadonlySet<string> = new Set(),
+): { error: string } | { async: boolean } {
   if (body.length > MAX_BODY_LENGTH) return { error: `body is longer than ${MAX_BODY_LENGTH} characters` };
 
   let ast;
@@ -67,12 +77,31 @@ export function checkBody(body: string, extension: SupportedExtension): { error:
     CallExpression(path) {
       const callee = path.node.callee;
       if (rootIdentifier(callee) === "expect") hasExpect = true;
-      if (callee.type === "Identifier" && callee.name === "require") problem = "uses require()";
+      if (callee.type === "Identifier" && callee.name === "require") {
+        const [arg] = path.node.arguments;
+        problem = arg?.type === "StringLiteral" ? `uses require("${arg.value}")` : "uses require()";
+      }
       if (rootIdentifier(callee) === "jest" || rootIdentifier(callee) === "vi") {
         const member = callee.type === "MemberExpression" && callee.property.type === "Identifier" ? callee.property.name : "";
         if (FORBIDDEN_JEST_METHODS.has(member)) problem = `calls jest.${member}()`;
       }
-      if (callee.type === "MemberExpression" && rootIdentifier(callee) === "process") problem = "calls a process method";
+      if (callee.type === "MemberExpression" && callee.property.type === "Identifier" && callee.property.name.startsWith("mock")) {
+        let stubbed = callee.object;
+        if (stubbed.type === "CallExpression" && rootIdentifier(stubbed.callee) === "jest") stubbed = stubbed.arguments[0] as typeof stubbed;
+        if (stubbed?.type === "Identifier" && targets.has(stubbed.name)) {
+          problem = `calls ${callee.property.name}() on \`${stubbed.name}\`, a real function under test (only dependencies are mocked)`;
+        }
+      }
+      if (rootIdentifier(callee) === "jest" && callee.type === "MemberExpression" && propertyIs(callee, "spyOn")) {
+        const [, method] = path.node.arguments;
+        if (method?.type === "StringLiteral" && targets.has(method.value)) {
+          problem = `spies on \`${method.value}\`, a function under test; calls inside the source file bypass spies`;
+        }
+      }
+      if (callee.type === "MemberExpression" && rootIdentifier(callee) === "process") {
+        const member = callee.property.type === "Identifier" ? callee.property.name : "";
+        if (!SAFE_PROCESS_METHODS.has(member)) problem = `calls process.${member || "[…]"}()`;
+      }
     },
     ImportExpression() {
       problem = "uses import()";
@@ -84,6 +113,10 @@ export function checkBody(body: string, extension: SupportedExtension): { error:
       if (path.node.await && path.getFunctionParent()?.parentPath?.isProgram()) usesAwait = true;
     },
     Identifier(path) {
+      const { name } = path.node;
+      if ((name === "exports" || (name === "module" && path.parentPath.isMemberExpression({ object: path.node }))) && path.isReferencedIdentifier() && !path.scope.hasBinding(name)) {
+        problem = `uses ${name === "module" ? "module.exports" : "exports"}, which is the test file's own module`;
+      }
       if ((path.node.name === "describe" || path.node.name === "it" || path.node.name === "test") && path.parentPath.isCallExpression({ callee: path.node })) {
         problem = `wraps the body in ${path.node.name}()`;
       }
@@ -97,6 +130,7 @@ export function checkBody(body: string, extension: SupportedExtension): { error:
 
 export function validateGeneration(generation: Generation, bindings: Binding[], extension: SupportedExtension): ValidationResult {
   const byName = new Map(bindings.map((b) => [b.binding, b]));
+  const targets = new Set(byName.keys());
   const suites = new Map<string, ValidatedSuite>();
   const rejected: RejectedCase[] = [];
 
@@ -127,7 +161,7 @@ export function validateGeneration(generation: Generation, bindings: Binding[], 
         continue;
       }
 
-      const check = checkBody(testCase.body, extension);
+      const check = checkBody(testCase.body, extension, targets);
       if ("error" in check) {
         reject(check.error);
         continue;

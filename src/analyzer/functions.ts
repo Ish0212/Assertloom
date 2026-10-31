@@ -85,6 +85,11 @@ function collectCandidates(body: Statement[]): Candidate[] {
   const byLocalName = new Map<string, Candidate>();
 
   const addCandidate = (name: string, node: FunctionNode, exportedAs: string[] = []) => {
+    const existing = candidates.find((c) => c.node === node);
+    if (existing) {
+      for (const e of exportedAs) if (!existing.exportedAs.includes(e)) existing.exportedAs.push(e);
+      return existing;
+    }
     const candidate = { name, node, exportedAs };
     candidates.push(candidate);
     if (name !== "default") byLocalName.set(name, candidate);
@@ -103,6 +108,10 @@ function collectCandidates(body: Statement[]): Candidate[] {
   };
 
   const pendingExports: Array<{ local: string; exported: string }> = [];
+  /** Top-level `const name = { ... }` objects, for `module.exports = name` and `exports.x = name.x`. */
+  const objects = new Map<string, Expression>();
+  const pendingObjects: string[] = [];
+  const pendingMembers: Array<{ object: string; property: string; exported: string }> = [];
 
   const addCommonJsObject = (node: Expression) => {
     if (node.type !== "ObjectExpression") return;
@@ -123,8 +132,14 @@ function collectCandidates(body: Statement[]): Candidate[] {
   for (const stmt of body) {
     switch (stmt.type) {
       case "FunctionDeclaration":
+        addDeclaration(stmt, false);
+        break;
+
       case "VariableDeclaration":
         addDeclaration(stmt, false);
+        for (const decl of stmt.declarations) {
+          if (decl.id.type === "Identifier" && decl.init?.type === "ObjectExpression") objects.set(decl.id.name, decl.init);
+        }
         break;
 
       case "ExportNamedDeclaration":
@@ -163,8 +178,10 @@ function collectCandidates(body: Statement[]): Candidate[] {
         if (isModuleExports) {
           const fn = asFunction(expr.right);
           if (fn) addCandidate(fn.type === "FunctionExpression" && fn.id ? fn.id.name : "default", fn, ["default"]);
-          else if (expr.right.type === "Identifier") pendingExports.push({ local: expr.right.name, exported: "default" });
-          else addCommonJsObject(expr.right);
+          else if (expr.right.type === "Identifier") {
+            pendingExports.push({ local: expr.right.name, exported: "default" });
+            pendingObjects.push(expr.right.name);
+          } else addCommonJsObject(expr.right);
           break;
         }
 
@@ -180,8 +197,27 @@ function collectCandidates(body: Statement[]): Candidate[] {
         const fn = asFunction(expr.right);
         if (fn) addCandidate(key, fn, [key]);
         else if (expr.right.type === "Identifier") pendingExports.push({ local: expr.right.name, exported: key });
+        else if (expr.right.type === "MemberExpression" && expr.right.object.type === "Identifier" && !expr.right.computed) {
+          const member = propertyName(expr.right.property);
+          if (member) pendingMembers.push({ object: expr.right.object.name, property: member, exported: key });
+        }
         break;
       }
+    }
+  }
+
+  for (const name of pendingObjects) {
+    const object = objects.get(name);
+    if (object) addCommonJsObject(object);
+  }
+  for (const { object, property, exported } of pendingMembers) {
+    const node = objects.get(object);
+    if (node?.type !== "ObjectExpression") continue;
+    for (const prop of node.properties) {
+      if (prop.type !== "ObjectProperty" || propertyName(prop.key) !== property) continue;
+      const fn = asFunction(prop.value);
+      if (fn) addCandidate(exported, fn, [exported]);
+      else if (prop.value.type === "Identifier") pendingExports.push({ local: prop.value.name, exported });
     }
   }
 

@@ -9,6 +9,7 @@ interface RunCommandOptions {
   source?: string;
   timeout: string;
   json?: boolean;
+  allowNetwork?: boolean;
 }
 
 /** `math.test.preview.ts` / `math.test.ts` / `math.spec.ts` → `math.ts`. */
@@ -25,6 +26,7 @@ export function registerRunCommand(program: Command): void {
     .option("--source <file>", "source file to measure coverage for (default: inferred from the test file name)")
     .option("--timeout <seconds>", "kill Jest if it runs longer than this", "120")
     .option("--json", "print the full result as JSON")
+    .option("--allow-network", "let the tests open network connections (blocked by default)")
     .action(async (testFile: string, options: RunCommandOptions) => {
       const testPath = path.resolve(testFile);
       try {
@@ -40,7 +42,12 @@ export function registerRunCommand(program: Command): void {
       const timeoutSeconds = Number(options.timeout);
       if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) throw new FileValidationError("--timeout must be a positive number.");
 
-      const result = await runJest({ testPath, sourcePath: source.absolutePath, timeoutMs: timeoutSeconds * 1000 });
+      const result = await runJest({
+        testPath,
+        sourcePath: source.absolutePath,
+        timeoutMs: timeoutSeconds * 1000,
+        allowNetwork: !!options.allowNetwork,
+      });
 
       if (options.json) console.log(JSON.stringify(result, null, 2));
       else printRunResult(result);

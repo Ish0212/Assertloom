@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { GENERATION_SYSTEM_PROMPT, buildGenerationPrompt } from "../ai/prompts.js";
+import { formatUsd, promptTokens, type Budget } from "../ai/pricing.js";
 import type { LLMProvider, TokenUsage } from "../ai/provider.js";
 import { redactSecrets } from "../ai/redact.js";
 import { analyzeSource } from "../analyzer/index.js";
@@ -41,6 +42,7 @@ export async function generateTests(options: {
   mock?: string[];
   /** Modules to keep real even if Assertloom would mock them. */
   keepReal?: string[];
+  budget?: Budget;
 }): Promise<GenerationResult> {
   const { source, provider } = options;
   const testPath = options.testPath ?? previewPathFor(source.absolutePath);
@@ -64,20 +66,27 @@ export async function generateTests(options: {
     keepReal: options.keepReal,
   });
   const redacted = redactSecrets(code);
+  const prompt = buildGenerationPrompt({
+    analysis,
+    code: redacted.code,
+    bindings: plan.bindings,
+    testFileName: path.basename(testPath),
+    mockSummary: mocks.summary,
+  });
+
+  const { budget } = options;
+  if (budget && !budget.allows({ inputTokens: promptTokens(GENERATION_SYSTEM_PROMPT, prompt), outputTokens: MAX_OUTPUT_TOKENS })) {
+    throw new GenerationError(`Generating tests for ${analysis.file} could exceed the spending limit of ${formatUsd(budget.maxUsd)}; raise it with --max-cost.`);
+  }
 
   const response = await provider.generateStructured({
     system: GENERATION_SYSTEM_PROMPT,
-    prompt: buildGenerationPrompt({
-      analysis,
-      code: redacted.code,
-      bindings: plan.bindings,
-      testFileName: path.basename(testPath),
-      mockSummary: mocks.summary,
-    }),
+    prompt,
     schema: GenerationSchema,
     schemaName: "assertloom_tests",
     maxOutputTokens: MAX_OUTPUT_TOKENS,
   });
+  budget?.add(response.usage);
 
   const { suites, rejected } = validateGeneration(response.data, plan.bindings, source.extension);
   if (suites.length === 0) {

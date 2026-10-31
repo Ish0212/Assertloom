@@ -9,6 +9,7 @@ const BODY_RULES = `- Call target functions only through the binding names liste
 - Dependencies listed under "Mocks" are already mocked by Assertloom and reset before every test, so every jest.fn() returns undefined until the test configures it. In each test, set up exactly what the code path needs with mockResolvedValue, mockRejectedValue, mockReturnValue, mockReturnValueOnce, or mockImplementation. In TypeScript, wrap mocks with jest.mocked(...) and cast fake values with \`as any\` when they are partial.
 - Shape fake values like the real API the source expects (for example, fetch responses need \`ok\`, \`status\`, and \`json: async () => data\`).
 - Where it matters, assert how dependencies were called with toHaveBeenCalledWith or toHaveBeenCalledTimes.
+- Functions in the source call each other directly, so spying on them has no effect, and \`module.exports\`/\`exports\` in a test refer to the test file itself. Control behavior through the mocked dependencies and real inputs instead.
 - Tests must pass on every operating system. Never hardcode path separators in expected values; build expected paths with the same functions the source uses (such as path.join, when it is imported in the test file) or use expect.stringContaining.
 - For async functions, use await, or await expect(...).rejects for rejections.
 - Use toBeCloseTo for floating-point results and toEqual for objects and arrays.

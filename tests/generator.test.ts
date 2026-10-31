@@ -7,7 +7,7 @@ import { buildGenerationPrompt, GENERATION_SYSTEM_PROMPT } from "../src/ai/promp
 import { redactSecrets } from "../src/ai/redact.js";
 import { analyzeFile, parseSource } from "../src/analyzer/index.js";
 import { validateSourceFile } from "../src/cli/validateFile.js";
-import { generateTests, GenerationError, TestFileExistsError, writeTestFile } from "../src/generator/index.js";
+import { generateTests, GenerationError, TestFileExistsError, unifiedDiff, writeTestFile } from "../src/generator/index.js";
 import type { FileAnalysis } from "../src/types/index.js";
 import { importSpecifier, planImports } from "../src/generator/importPlan.js";
 import { GenerationSchema, type Generation } from "../src/generator/schema.js";
@@ -86,6 +86,20 @@ describe("planImports", () => {
 });
 
 describe("checkBody", () => {
+  it("rejects stubbing or spying on functions under test", () => {
+    const targets = new Set(["parse", "config"]);
+    expect(checkBody("parse.mockReturnValue({}); expect(config()).toEqual({});", ".js", targets)).toEqual({
+      error: "calls mockReturnValue() on `parse`, a real function under test (only dependencies are mocked)",
+    });
+    expect(checkBody("jest.mocked(parse).mockReturnValue({} as any); expect(config()).toEqual({});", ".ts", targets)).toMatchObject({
+      error: expect.stringContaining("`parse`, a real function under test"),
+    });
+    expect(checkBody("const api = { parse }; jest.spyOn(api, 'parse'); expect(config()).toEqual({});", ".js", targets)).toMatchObject({
+      error: expect.stringContaining("spies on `parse`"),
+    });
+    expect(checkBody("fs.readFileSync.mockReturnValue('A=1'); expect(config()).toEqual({ A: '1' });", ".js", targets)).toEqual({ async: false });
+  });
+
   it("accepts a body with expect() and detects await", () => {
     expect(checkBody("expect(add(1, 2)).toBe(3);", ".ts")).toEqual({ async: false });
     expect(checkBody("await expect(load()).rejects.toThrow();", ".ts")).toEqual({ async: true });
@@ -94,15 +108,20 @@ describe("checkBody", () => {
 
   it("allows TypeScript syntax in TS files", () => {
     expect(checkBody("expect(() => add('1' as any, 2)).not.toThrow();", ".ts")).toEqual({ async: false });
+    expect(checkBody("expect(resolve(process.cwd())).toBe(process.cwd());", ".js")).toEqual({ async: false });
+    expect(checkBody("const result = load({ exports: 1 });\nexpect(result.exports).toBe(1);", ".js")).toEqual({ async: false });
   });
 
   it.each([
     ["add(1, 2);", "does not call expect()"],
-    ["const fs = require('fs'); expect(fs).toBeDefined();", "uses require()"],
+    ["const fs = require('fs'); expect(fs).toBeDefined();", 'uses require("fs")'],
     ["jest.mock('./db'); expect(1).toBe(1);", "calls jest.mock()"],
     ["const real = jest.requireActual('pg'); expect(real).toBeDefined();", "calls jest.requireActual()"],
     ["const m = await import('./x'); expect(m).toBeDefined();", "uses import()"],
-    ["process.exit(1); expect(1).toBe(1);", "calls a process method"],
+    ["process.exit(1); expect(1).toBe(1);", "calls process.exit()"],
+    ["process.chdir('/'); expect(1).toBe(1);", "calls process.chdir()"],
+    ["jest.spyOn(module.exports, 'parse'); expect(1).toBe(1);", "uses module.exports, which is the test file's own module"],
+    ["exports.x = 1; expect(1).toBe(1);", "uses exports, which is the test file's own module"],
     ["it('nested', () => { expect(1).toBe(1); });", "wraps the body in it()"],
   ])("rejects %s", (body, reason) => {
     expect(checkBody(body, ".ts")).toEqual({ error: reason });
@@ -293,5 +312,25 @@ describe("writeTestFile", () => {
 
     await writeTestFile(handWritten, "forced", true);
     expect(await readFile(handWritten, "utf8")).toBe("forced");
+  });
+
+  it("reports a diff before overwriting changed content", async () => {
+    const file = path.join(dir, "a.test.ts");
+    const diffs: string[][] = [];
+    await writeTestFile(file, `${GENERATED_HEADER}\nkeep\nold\n`);
+    await writeTestFile(file, `${GENERATED_HEADER}\nkeep\nnew\n`, false, (d) => diffs.push(d));
+    await writeTestFile(file, `${GENERATED_HEADER}\nkeep\nnew\n`, false, (d) => diffs.push(d));
+
+    expect(diffs).toEqual([["@@ -1,4 +1,4 @@", ` ${GENERATED_HEADER}`, " keep", "-old", "+new", " "]]);
+  });
+});
+
+describe("unifiedDiff", () => {
+  it("shows changed lines with context and hunk headers", () => {
+    const before = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"].join("\n");
+    const after = ["a", "B", "c", "d", "e", "f", "g", "h", "i", "j", "k"].join("\n");
+
+    expect(unifiedDiff(before, after, { context: 1 })).toEqual(["@@ -1,3 +1,3 @@", " a", "-b", "+B", " c", "@@ -10,1 +10,2 @@", " j", "+k"]);
+    expect(unifiedDiff("same", "same")).toEqual([]);
   });
 });

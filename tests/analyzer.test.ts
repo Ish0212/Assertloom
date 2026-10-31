@@ -186,6 +186,25 @@ describe("analyzer: CommonJS", () => {
     expect(analysis.functions).toHaveLength(1);
     expect(analysis.functions[0]).toMatchObject({ name: "fetchAll", exportedAs: ["default"], async: true });
   });
+
+  it("follows module.exports = object and exports.x = object.x", () => {
+    const code = [
+      "function parse(src) { return src; }",
+      "function config() { return {}; }",
+      "function _internal() {}",
+      "const Api = { parse, config, inline: () => 1 };",
+      "module.exports.parse = Api.parse;",
+      "module.exports.inline = Api.inline;",
+      "module.exports = Api;",
+    ].join("\n");
+    const analysis = analyzeSource(code, { inputPath: "inline.cjs", extension: ".cjs", language: "javascript" });
+
+    expect(analysis.functions.filter((f) => f.exported).map((f) => [f.name, f.exportedAs])).toEqual([
+      ["parse", ["parse"]],
+      ["config", ["config"]],
+      ["inline", ["inline"]],
+    ]);
+  });
 });
 
 describe("analyzer: JSX (component.tsx)", () => {
