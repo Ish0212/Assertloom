@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       live:
-        description: Also run against a real model (uses the OPENAI_API_KEY secret, at most $0.05)
+        description: Also run against a real model (uses the OPENAI_API_KEY secret, at most $0.20)
         type: boolean
         default: false
 
@@ -87,7 +87,7 @@ jobs:
           api-key: ${{ secrets.OPENAI_API_KEY }}
           working-directory: ${{ runner.temp }}/consumer
           base: ${{ steps.fixture.outputs.base }}
-          max-cost: "0.05"
+          max-cost: "0.20"
           max-files: "3"
           fail-on: never
           assertloom-tarball: ${{ steps.pack.outputs.tarball }}
