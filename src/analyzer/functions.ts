@@ -80,7 +80,48 @@ function propertyName(node: Node): string | undefined {
   return undefined;
 }
 
-function collectCandidates(body: Statement[]): Candidate[] {
+const isModuleExports = (node: Node) =>
+  node.type === "MemberExpression" &&
+  node.object.type === "Identifier" &&
+  node.object.name === "module" &&
+  propertyName(node.property) === "exports";
+
+/** Whether any node under `node` passes `test`. */
+function someNode(node: unknown, test: (node: Node) => boolean): boolean {
+  if (!node || typeof node !== "object") return false;
+  if (Array.isArray(node)) return node.some((child) => someNode(child, test));
+  if (typeof (node as Node).type === "string" && test(node as Node)) return true;
+  return Object.entries(node).some(([key, value]) => !key.endsWith("Comments") && key !== "loc" && someNode(value, test));
+}
+
+/**
+ * The factory of a UMD wrapper, `(function (root, factory) { ... module.exports = factory(); ... })(this, function () { ... })`,
+ * whose return value is what the module exports.
+ */
+function umdFactory(expression: Expression): FunctionExpression | ArrowFunctionExpression | undefined {
+  let call = unwrap(expression);
+  if (call?.type === "UnaryExpression") call = unwrap(call.argument);
+  if (call?.type !== "CallExpression") return undefined;
+  const wrapper = asFunction(call.callee);
+  const index = call.arguments.findIndex((arg) => asFunction(arg));
+  const param = wrapper?.params[index];
+  if (!wrapper || index < 0 || param?.type !== "Identifier") return undefined;
+
+  const exportsFactory = someNode(
+    wrapper.body,
+    (node) =>
+      node.type === "AssignmentExpression" &&
+      isModuleExports(node.left) &&
+      node.right.type === "CallExpression" &&
+      node.right.callee.type === "Identifier" &&
+      node.right.callee.name === param.name,
+  );
+  const factory = asFunction(call.arguments[index]);
+  return exportsFactory && factory?.body.type === "BlockStatement" ? factory : undefined;
+}
+
+/** `returnExports` treats `return x` as `module.exports = x` (the body of a UMD factory). */
+function collectCandidates(body: Statement[], returnExports = false): Candidate[] {
   const candidates: Candidate[] = [];
   const byLocalName = new Map<string, Candidate>();
 
@@ -129,8 +170,21 @@ function collectCandidates(body: Statement[]): Candidate[] {
     }
   };
 
+  const exportModule = (value: Expression) => {
+    const fn = asFunction(value);
+    if (fn) addCandidate(fn.type === "FunctionExpression" && fn.id ? fn.id.name : "default", fn, ["default"]);
+    else if (value.type === "Identifier") {
+      pendingExports.push({ local: value.name, exported: "default" });
+      pendingObjects.push(value.name);
+    } else addCommonJsObject(value);
+  };
+
   for (const stmt of body) {
     switch (stmt.type) {
+      case "ReturnStatement":
+        if (returnExports && stmt.argument) exportModule(stmt.argument);
+        break;
+
       case "FunctionDeclaration":
         addDeclaration(stmt, false);
         break;
@@ -170,18 +224,16 @@ function collectCandidates(body: Statement[]): Candidate[] {
 
       case "ExpressionStatement": {
         const expr = stmt.expression;
+        const factory = umdFactory(expr);
+        if (factory?.body.type === "BlockStatement") {
+          for (const c of collectCandidates(factory.body.body, true)) addCandidate(c.name, c.node, c.exportedAs);
+          break;
+        }
         if (expr.type !== "AssignmentExpression" || expr.operator !== "=" || expr.left.type !== "MemberExpression") break;
         const { object, property } = expr.left;
-        const isModuleExports =
-          object.type === "Identifier" && object.name === "module" && propertyName(property) === "exports";
 
-        if (isModuleExports) {
-          const fn = asFunction(expr.right);
-          if (fn) addCandidate(fn.type === "FunctionExpression" && fn.id ? fn.id.name : "default", fn, ["default"]);
-          else if (expr.right.type === "Identifier") {
-            pendingExports.push({ local: expr.right.name, exported: "default" });
-            pendingObjects.push(expr.right.name);
-          } else addCommonJsObject(expr.right);
+        if (isModuleExports(expr.left)) {
+          exportModule(expr.right);
           break;
         }
 

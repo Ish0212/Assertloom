@@ -2,62 +2,53 @@
 const { parse, serialize } = require("./index");
 
 describe("parse", () => {
-  it("throws when input is not a string", () => {
-    expect(() => parse(42)).toThrow(TypeError);
-    expect(() => parse(42)).toThrow('argument str must be a string');
+  it("throws when str is not a string", () => {
+    expect(() => parse(123)).toThrow(TypeError);
+    expect(() => parse(123)).toThrow('argument str must be a string');
   });
 
-  it("returns empty object for very short cookie strings", () => {
+  it("returns empty object for short cookie strings", () => {
     expect(parse('')).toEqual({});
     expect(parse('a')).toEqual({});
   });
 
-  it("parses cookie pairs and trims surrounding whitespace", () => {
-    expect(parse('foo=bar; baz=qux')).toEqual({ foo: 'bar', baz: 'qux' });
-    expect(parse('  foo =  bar  ;\tbaz=\tqux\t')).toEqual({ foo: 'bar', baz: 'qux' });
+  it("parses multiple cookies and trims surrounding whitespace", () => {
+    expect(parse('  foo = bar ; baz=qux	; zipped = value ')).toEqual({ foo: 'bar', baz: 'qux', zipped: 'value' });
   });
 
-  it("keeps the first value when a cookie name repeats", () => {
-    expect(parse('foo=first; foo=second; bar=third')).toEqual({ foo: 'first', bar: 'third' });
+  it("keeps the first value for duplicate cookie names", () => {
+    expect(parse('a=1; a=2; a=3')).toEqual({ a: '1' });
   });
 
-  it("decodes percent-encoded values and preserves invalid encodings", () => {
-    expect(parse('encoded=a%20b')).toEqual({ encoded: 'a b' });
-    expect(parse('broken=%E0%A4%A')).toEqual({ broken: '%E0%A4%A' });
+  it("preserves undecodable values when decode throws", () => {
+    const dec = jest.fn(() => { throw new URIError('bad'); });
+    expect(parse('x=%E0%A4%A', { decode: dec })).toEqual({ x: '%E0%A4%A' });
+    expect(dec).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("serialize", () => {
-  it("throws when encode option is not a function", () => {
-    expect(() => serialize('name', 'value', { encode: 'nope' })).toThrow(TypeError);
-    expect(() => serialize('name', 'value', { encode: 'nope' })).toThrow('option encode is invalid');
-  });
-
-  it("throws when cookie name is invalid", () => {
-    expect(() => serialize('bad name', 'value')).toThrow(TypeError);
-    expect(() => serialize('bad name', 'value')).toThrow('argument name is invalid');
-  });
-
-  it("serializes a basic cookie value", () => {
+  it("serializes a simple cookie pair", () => {
     expect(serialize('foo', 'bar')).toBe('foo=bar');
-    expect(serialize('token', 'a b')).toBe('token=a%20b');
   });
 
-  it("includes supported attributes in the output", () => {
+  it("appends standard options in the expected order", () => {
     const expires = new Date('2020-01-01T00:00:00.000Z');
-    expect(serialize('foo', 'bar', { maxAge: 10.9, domain: 'example.com', path: '/test', expires, httpOnly: true, secure: true, partitioned: true })).toBe('foo=bar; Max-Age=10; Domain=example.com; Path=/test; Expires=' + expires.toUTCString() + '; HttpOnly; Secure; Partitioned');
+    expect(serialize('foo', 'bar', { maxAge: 2.9, domain: 'example.com', path: '/x', expires, httpOnly: true, secure: true, partitioned: true, priority: 'High', sameSite: 'Lax' })).toBe('foo=bar; Max-Age=2; Domain=example.com; Path=/x; Expires=' + expires.toUTCString() + '; HttpOnly; Secure; Partitioned; Priority=High; SameSite=Lax');
   });
 
-  it("supports priority and sameSite variants", () => {
-    expect(serialize('foo', 'bar', { priority: 'High', sameSite: true })).toBe('foo=bar; Priority=High; SameSite=Strict');
-    expect(serialize('foo', 'bar', { priority: 'low', sameSite: 'none' })).toBe('foo=bar; Priority=Low; SameSite=None');
+  it("accepts upper-case priority and boolean sameSite strict", () => {
+    expect(serialize('foo', 'bar', { priority: 'LOW', sameSite: true })).toBe('foo=bar; Priority=Low; SameSite=Strict');
   });
 
-  it("throws for invalid attribute values", () => {
-    expect(() => serialize('foo', 'bar', { maxAge: Infinity })).toThrow('option maxAge is invalid');
-    expect(() => serialize('foo', 'bar', { domain: 'bad domain' })).toThrow('option domain is invalid');
-    expect(() => serialize('foo', 'bar', { path: 'bad;path' })).toThrow('option path is invalid');
-    expect(() => serialize('foo', 'bar', { priority: 'urgent' })).toThrow('option priority is invalid');
-    expect(() => serialize('foo', 'bar', { sameSite: 'maybe' })).toThrow('option sameSite is invalid');
+  it("throws for invalid name value and option encode", () => {
+    expect(() => serialize('bad name', 'bar')).toThrow('argument name is invalid');
+    expect(() => serialize('ok', 'bar', { encode: 'nope' })).toThrow('option encode is invalid');
+  });
+
+  it("throws for invalid option values", () => {
+    expect(() => serialize('ok', 'bar', { maxAge: Infinity })).toThrow('option maxAge is invalid');
+    expect(() => serialize('ok', 'bar', { domain: '-bad-.com' })).toThrow('option domain is invalid');
+    expect(() => serialize('ok', 'bar', { path: 'bad\npath' })).toThrow('option path is invalid');
   });
 });

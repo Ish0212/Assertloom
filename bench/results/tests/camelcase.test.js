@@ -2,35 +2,34 @@
 import camelCase from "./index";
 
 describe("camelCase", () => {
-  it("throws for non-string non-array input", () => {
-    expect(() => camelCase(123)).toThrow(TypeError);
-    expect(() => camelCase(123)).toThrow('Expected the input to be `string | string[]`');
+  it("throws on non-string non-array input", () => {
+    expect(() => camelCase(42)).toThrow(TypeError);
+    expect(() => camelCase(42)).toThrow('Expected the input to be `string | string[]`');
   });
 
-  it("returns empty string for whitespace-only and separator-only inputs", () => {
+  it("returns empty string for whitespace-only input", () => {
     expect(camelCase('   ')).toBe('');
-    expect(camelCase('-')).toBe('');
-    expect(camelCase('_.- ')).toBe('');
+    expect(camelCase('\n\t ')).toBe('');
   });
 
-  it("converts a separated string to camel case", () => {
-    expect(camelCase('foo-bar_baz qux')).toBe('fooBarBazQux');
-    expect(camelCase('FOO_BAR')).toBe('fooBar');
-  });
-
-  it("handles arrays by trimming, filtering empties, and joining", () => {
+  it("handles array input by trimming filtering and joining", () => {
     expect(camelCase(['  foo  ', '', 'BAR', ' baz '])).toBe('fooBarBaz');
-    expect(camelCase(['  ', '\t', 'x'])).toBe('x');
+    expect(camelCase(['', '   ', 'x'])).toBe('x');
   });
 
-  it("supports pascal case and preserveConsecutiveUppercase options", () => {
-    expect(camelCase('foo-bar', {pascalCase: true})).toBe('FooBar');
+  it("converts separators and preserves pascal case option", () => {
+    expect(camelCase('foo-bar_baz qux')).toBe('fooBarBazQux');
+    expect(camelCase('foo-bar_baz qux', {pascalCase: true})).toBe('FooBarBazQux');
+  });
+
+  it("handles single character inputs and separator-only inputs", () => {
+    expect(camelCase('a')).toBe('a');
+    expect(camelCase('A')).toBe('a');
+    expect(camelCase('-', {pascalCase: true})).toBe('');
+  });
+
+  it("preserves consecutive uppercase letters when requested", () => {
+    expect(camelCase('XMLHttpRequest', {preserveConsecutiveUppercase: true})).toBe('XMLHttpRequest');
     expect(camelCase('fooBARBaz', {preserveConsecutiveUppercase: true})).toBe('fooBARBaz');
-    expect(camelCase('fooBARBaz')).toBe('fooBarBaz');
-  });
-
-  it("uses locale-aware casing when locale is provided or disabled", () => {
-    expect(camelCase('istanbul', {pascalCase: true, locale: 'tr'})).toBe('İstanbul');
-    expect(camelCase('istanbul', {pascalCase: true, locale: false})).toBe('Istanbul');
   });
 });

@@ -1,9 +1,9 @@
 {
   "meta": {
-    "Date": "2026-10-31",
+    "Date": "2026-11-01",
     "Assertloom": "0.1.0",
-    "Model": "gpt-5.4-mini",
-    "Prices": "OpenAI standard rates checked 2026-10-31",
+    "Model": "gpt-5.4-mini (openai)",
+    "Prices": "standard API rates checked 2026-10-31",
     "Node": "v24.11.1",
     "OS": "win32 x64",
     "Spending limit": "$0.5 per file",
@@ -12,48 +12,48 @@
   "totals": {
     "files": 9,
     "generation": {
-      "filesWithTests": 8,
-      "fileRate": 88.9,
-      "generatedCases": 84,
-      "acceptedCases": 77,
-      "caseRate": 91.7
+      "filesWithTests": 9,
+      "fileRate": 100,
+      "generatedCases": 88,
+      "acceptedCases": 73,
+      "caseRate": 83
     },
     "execution": {
-      "filesThatRan": 8,
-      "fileRate": 88.9,
-      "firstRunPassed": 65,
-      "firstRunTotal": 77,
-      "firstRunPassRate": 84.4
+      "filesThatRan": 9,
+      "fileRate": 100,
+      "firstRunPassed": 64,
+      "firstRunTotal": 73,
+      "firstRunPassRate": 87.7
     },
     "repair": {
-      "initiallyFailing": 12,
-      "repaired": 11,
-      "rate": 91.7,
+      "initiallyFailing": 9,
+      "repaired": 9,
+      "rate": 100,
       "flaggedAsSourceBugs": 0,
-      "gaveUp": 1,
-      "filesNeedingRepair": 3
+      "gaveUp": 0,
+      "filesNeedingRepair": 6
     },
     "final": {
-      "passed": 76,
-      "total": 77,
-      "passRate": 98.7,
-      "filesAllPassing": 7
+      "passed": 73,
+      "total": 73,
+      "passRate": 100,
+      "filesAllPassing": 9
     },
     "coverage": {
       "before": 0,
-      "meanLines": 95,
-      "meanBranches": 81.3
+      "meanLines": 88.6,
+      "meanBranches": 83.3
     },
     "runtime": {
-      "totalSeconds": 93.9,
-      "medianSecondsPerFile": 7.7
+      "totalSeconds": 132.6,
+      "medianSecondsPerFile": 13.9
     },
     "cost": {
-      "totalUsd": 0.0687,
-      "meanUsdPerFile": 0.0076,
+      "totalUsd": 0.072,
+      "meanUsdPerFile": 0.008,
       "tokens": {
-        "input": 35243,
-        "output": 9390
+        "input": 45040,
+        "output": 8485
       }
     }
   },
@@ -68,45 +68,45 @@
       "accepted": 6,
       "rejected": {},
       "mocked": [],
-      "repairAttempts": 0,
+      "repairAttempts": 1,
       "flaggedAsSourceBugs": 0,
       "gaveUp": 0,
       "durationMs": {
-        "generation": 1708,
-        "firstRun": 2878,
-        "repair": 0,
-        "total": 6430
+        "generation": 2751,
+        "firstRun": 6120,
+        "repair": 6895,
+        "total": 18046
       },
       "tokens": {
-        "input": 1870,
-        "output": 255
+        "input": 4027,
+        "output": 576
       },
-      "costUsd": 0.00255,
+      "costUsd": 0.00561225,
       "initial": {
-        "status": "passed",
-        "passed": 6,
-        "failed": 0,
+        "status": "failed",
+        "passed": 4,
+        "failed": 2,
         "skipped": 0,
         "coverage": {
           "lines": 86.41,
           "statements": 86.41,
           "functions": 100,
-          "branches": 33.89
+          "branches": 45.76
         }
       },
-      "stopReason": "all-passing",
       "final": {
         "status": "passed",
         "passed": 6,
         "failed": 0,
         "skipped": 0,
         "coverage": {
-          "lines": 86.41,
-          "statements": 86.41,
+          "lines": 88.88,
+          "statements": 88.88,
           "functions": 100,
-          "branches": 33.89
+          "branches": 50.81
         }
-      }
+      },
+      "stopReason": "all-passing"
     },
     {
       "package": "bytes@3.1.2",
@@ -118,45 +118,45 @@
       "accepted": 15,
       "rejected": {},
       "mocked": [],
-      "repairAttempts": 1,
+      "repairAttempts": 2,
       "flaggedAsSourceBugs": 0,
       "gaveUp": 0,
       "durationMs": {
-        "generation": 2862,
-        "firstRun": 2792,
-        "repair": 5011,
-        "total": 12631
+        "generation": 3221,
+        "firstRun": 3621,
+        "repair": 8182,
+        "total": 16518
       },
       "tokens": {
-        "input": 4398,
-        "output": 1222
+        "input": 6365,
+        "output": 1010
       },
-      "costUsd": 0.0087975,
+      "costUsd": 0.00931875,
       "initial": {
         "status": "failed",
         "passed": 12,
         "failed": 3,
         "skipped": 0,
         "coverage": {
-          "lines": 98.23,
-          "statements": 98.23,
+          "lines": 97.64,
+          "statements": 97.64,
           "functions": 100,
-          "branches": 93.47
+          "branches": 90.9
         }
       },
-      "stopReason": "all-passing",
       "final": {
         "status": "passed",
         "passed": 15,
         "failed": 0,
         "skipped": 0,
         "coverage": {
-          "lines": 98.23,
-          "statements": 98.23,
+          "lines": 97.64,
+          "statements": 97.64,
           "functions": 100,
-          "branches": 93.47
+          "branches": 90.9
         }
-      }
+      },
+      "stopReason": "all-passing"
     },
     {
       "package": "escape-html@1.0.3",
@@ -172,16 +172,16 @@
       "flaggedAsSourceBugs": 0,
       "gaveUp": 0,
       "durationMs": {
-        "generation": 1706,
-        "firstRun": 2905,
+        "generation": 2179,
+        "firstRun": 2482,
         "repair": 0,
-        "total": 6241
+        "total": 6098
       },
       "tokens": {
         "input": 1257,
-        "output": 324
+        "output": 366
       },
-      "costUsd": 0.00240075,
+      "costUsd": 0.00258975,
       "initial": {
         "status": "passed",
         "passed": 5,
@@ -194,7 +194,6 @@
           "branches": 100
         }
       },
-      "stopReason": "all-passing",
       "final": {
         "status": "passed",
         "passed": 5,
@@ -206,7 +205,8 @@
           "functions": 100,
           "branches": 100
         }
-      }
+      },
+      "stopReason": "all-passing"
     },
     {
       "package": "content-type@1.0.5",
@@ -214,49 +214,51 @@
       "why": "CommonJS, parser that throws TypeErrors",
       "exportedFunctions": 2,
       "testedFunctions": 2,
-      "generated": 12,
-      "accepted": 12,
-      "rejected": {},
+      "generated": 10,
+      "accepted": 9,
+      "rejected": {
+        "syntax error: Unexpected token, expected \",\"": 1
+      },
       "mocked": [],
       "repairAttempts": 0,
       "flaggedAsSourceBugs": 0,
       "gaveUp": 0,
       "durationMs": {
-        "generation": 2851,
-        "firstRun": 3007,
+        "generation": 3194,
+        "firstRun": 2739,
         "repair": 0,
-        "total": 7721
+        "total": 7325
       },
       "tokens": {
         "input": 2404,
-        "output": 792
+        "output": 779
       },
-      "costUsd": 0.005367,
+      "costUsd": 0.0053085,
       "initial": {
         "status": "passed",
-        "passed": 12,
+        "passed": 9,
         "failed": 0,
         "skipped": 0,
         "coverage": {
-          "lines": 97.33,
-          "statements": 97.33,
+          "lines": 96.44,
+          "statements": 96.44,
           "functions": 100,
-          "branches": 91.89
+          "branches": 88.88
         }
       },
-      "stopReason": "all-passing",
       "final": {
         "status": "passed",
-        "passed": 12,
+        "passed": 9,
         "failed": 0,
         "skipped": 0,
         "coverage": {
-          "lines": 97.33,
-          "statements": 97.33,
+          "lines": 96.44,
+          "statements": 96.44,
           "functions": 100,
-          "branches": 91.89
+          "branches": 88.88
         }
-      }
+      },
+      "stopReason": "all-passing"
     },
     {
       "package": "cookie@0.7.2",
@@ -264,49 +266,49 @@
       "why": "CommonJS, parse/serialize with validation errors",
       "exportedFunctions": 2,
       "testedFunctions": 2,
-      "generated": 11,
-      "accepted": 11,
+      "generated": 10,
+      "accepted": 10,
       "rejected": {},
       "mocked": [],
       "repairAttempts": 0,
       "flaggedAsSourceBugs": 0,
       "gaveUp": 0,
       "durationMs": {
-        "generation": 3143,
-        "firstRun": 2831,
+        "generation": 3411,
+        "firstRun": 2558,
         "repair": 0,
-        "total": 7970
+        "total": 7851
       },
       "tokens": {
         "input": 3312,
-        "output": 859
+        "output": 697
       },
-      "costUsd": 0.0063495,
+      "costUsd": 0.0056205,
       "initial": {
         "status": "passed",
-        "passed": 11,
+        "passed": 10,
         "failed": 0,
         "skipped": 0,
         "coverage": {
-          "lines": 93.73,
-          "statements": 93.73,
+          "lines": 92.83,
+          "statements": 92.83,
           "functions": 100,
-          "branches": 82.66
+          "branches": 78.57
         }
       },
-      "stopReason": "all-passing",
       "final": {
         "status": "passed",
-        "passed": 11,
+        "passed": 10,
         "failed": 0,
         "skipped": 0,
         "coverage": {
-          "lines": 93.73,
-          "statements": 93.73,
+          "lines": 92.83,
+          "statements": 92.83,
           "functions": 100,
-          "branches": 82.66
+          "branches": 78.57
         }
-      }
+      },
+      "stopReason": "all-passing"
     },
     {
       "package": "camelcase@8.0.0",
@@ -318,71 +320,95 @@
       "accepted": 6,
       "rejected": {},
       "mocked": [],
-      "repairAttempts": 0,
+      "repairAttempts": 1,
       "flaggedAsSourceBugs": 0,
       "gaveUp": 0,
       "durationMs": {
-        "generation": 1936,
-        "firstRun": 3244,
-        "repair": 0,
-        "total": 6981
+        "generation": 2378,
+        "firstRun": 2804,
+        "repair": 23355,
+        "total": 29877
       },
       "tokens": {
-        "input": 1870,
-        "output": 425
+        "input": 3895,
+        "output": 534
       },
-      "costUsd": 0.003315,
+      "costUsd": 0.00532425,
       "initial": {
-        "status": "passed",
-        "passed": 6,
-        "failed": 0,
+        "status": "failed",
+        "passed": 5,
+        "failed": 1,
         "skipped": 0,
         "coverage": {
-          "lines": 100,
-          "statements": 100,
+          "lines": 98.18,
+          "statements": 98.18,
           "functions": 100,
-          "branches": 95.83
+          "branches": 91.3
         }
       },
-      "stopReason": "all-passing",
       "final": {
         "status": "passed",
         "passed": 6,
         "failed": 0,
         "skipped": 0,
         "coverage": {
-          "lines": 100,
-          "statements": 100,
+          "lines": 98.18,
+          "statements": 98.18,
           "functions": 100,
-          "branches": 95.83
+          "branches": 91.48
         }
-      }
+      },
+      "stopReason": "all-passing"
     },
     {
       "package": "slugify@1.6.6",
       "file": "slugify.js",
       "why": "UMD wrapper instead of plain exports",
-      "exportedFunctions": 0,
-      "testedFunctions": 0,
-      "generated": 0,
-      "accepted": 0,
+      "exportedFunctions": 1,
+      "testedFunctions": 1,
+      "generated": 5,
+      "accepted": 5,
       "rejected": {},
       "mocked": [],
-      "repairAttempts": 0,
+      "repairAttempts": 2,
       "flaggedAsSourceBugs": 0,
       "gaveUp": 0,
       "durationMs": {
-        "generation": 14,
-        "firstRun": 0,
-        "repair": 0,
-        "total": 1793
+        "generation": 1910,
+        "firstRun": 2735,
+        "repair": 7878,
+        "total": 13937
       },
       "tokens": {
-        "input": 0,
-        "output": 0
+        "input": 13968,
+        "output": 611
       },
-      "costUsd": 0,
-      "error": "No exported functions in package/slugify.js."
+      "costUsd": 0.0132255,
+      "initial": {
+        "status": "failed",
+        "passed": 4,
+        "failed": 1,
+        "skipped": 0,
+        "coverage": {
+          "lines": 86.95,
+          "statements": 86.95,
+          "functions": 50,
+          "branches": 86.95
+        }
+      },
+      "final": {
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "coverage": {
+          "lines": 86.95,
+          "statements": 86.95,
+          "functions": 50,
+          "branches": 92
+        }
+      },
+      "stopReason": "all-passing"
     },
     {
       "package": "semver@7.6.3",
@@ -400,16 +426,16 @@
       "flaggedAsSourceBugs": 0,
       "gaveUp": 0,
       "durationMs": {
-        "generation": 1919,
-        "firstRun": 2929,
-        "repair": 3777,
-        "total": 10732
+        "generation": 1720,
+        "firstRun": 2755,
+        "repair": 4766,
+        "total": 10807
       },
       "tokens": {
-        "input": 2195,
-        "output": 452
+        "input": 2194,
+        "output": 455
       },
-      "costUsd": 0.00368025,
+      "costUsd": 0.003693,
       "initial": {
         "status": "failed",
         "passed": 4,
@@ -422,7 +448,6 @@
           "branches": 75
         }
       },
-      "stopReason": "all-passing",
       "final": {
         "status": "passed",
         "passed": 5,
@@ -434,66 +459,67 @@
           "functions": 100,
           "branches": 75
         }
-      }
+      },
+      "stopReason": "all-passing"
     },
     {
       "package": "dotenv@16.4.7",
       "file": "lib/main.js",
       "why": "file system, os, and crypto side effects to mock",
       "exportedFunctions": 7,
-      "testedFunctions": 6,
-      "generated": 23,
-      "accepted": 17,
+      "testedFunctions": 3,
+      "generated": 25,
+      "accepted": 12,
       "rejected": {
-        "does not call expect()": 1,
-        "spies on `configDotenv`, a function under test; calls inside the source file bypass spies": 1,
-        "syntax error: Unexpected token": 1,
-        "syntax error: Unexpected token, expected \",\"": 3
+        "spies on `configDotenv`, a function under test; calls inside the source file bypass spies": 5,
+        "spies on `_parseVault`, a function under test; calls inside the source file bypass spies": 3,
+        "spies on `parse`, a function under test; calls inside the source file bypass spies": 4,
+        "spies on `_configVault`, a function under test; calls inside the source file bypass spies": 1
       },
       "mocked": [
         "fs",
         "os",
         "crypto"
       ],
-      "repairAttempts": 3,
+      "repairAttempts": 1,
       "flaggedAsSourceBugs": 0,
-      "gaveUp": 1,
+      "gaveUp": 0,
       "durationMs": {
-        "generation": 10485,
-        "firstRun": 2742,
-        "repair": 18291,
-        "total": 33412
+        "generation": 10741,
+        "firstRun": 4133,
+        "repair": 5556,
+        "total": 22188
       },
       "tokens": {
-        "input": 17937,
-        "output": 5061
+        "input": 7618,
+        "output": 3457
       },
-      "costUsd": 0.03622725,
+      "costUsd": 0.02127,
       "initial": {
         "status": "failed",
-        "passed": 9,
-        "failed": 8,
+        "passed": 11,
+        "failed": 1,
         "skipped": 0,
         "coverage": {
-          "lines": 65.37,
-          "statements": 65.37,
-          "functions": 64.28,
-          "branches": 44.73
+          "lines": 36.56,
+          "statements": 36.56,
+          "functions": 21.42,
+          "branches": 82.35
         }
       },
-      "stopReason": "no-valid-repairs",
       "final": {
         "status": "passed",
-        "passed": 16,
+        "passed": 12,
         "failed": 0,
-        "skipped": 1,
+        "skipped": 0,
         "coverage": {
-          "lines": 84.21,
-          "statements": 84.21,
-          "functions": 92.85,
-          "branches": 77.46
+          "lines": 36.56,
+          "statements": 36.56,
+          "functions": 21.42,
+          "branches": 82.35
         }
-      }
+      },
+      "stopReason": "all-passing"
     }
   ]
 }

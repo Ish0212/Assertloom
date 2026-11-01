@@ -2,72 +2,56 @@
 const { format, parse } = require("./index");
 
 describe("format", () => {
-  it("formats type without parameters", () => {
-    const result = format({ type: 'text/html' })
-    expect(result).toBe('text/html')
+  it("formats type with sorted parameters", () => {
+    const result = format({ type: 'text/html', parameters: { b: '2', a: '1' } })
+    expect(result).toBe('text/html; a=1; b=2')
   });
 
-  it("sorts parameters and quotes non-token values", () => {
-    const result = format({ type: 'text/html', parameters: { charset: 'utf-8', a: '1 2' } })
-    expect(result).toBe('text/html; a="1 2"; charset=utf-8')
+  it("formats values that require quoting and escaping", () => {
+    const result = format({ type: 'application/json', parameters: { quote: 'a"b\\c', space: 'hello world' } })
+    expect(result).toBe('application/json; quote="a\\"b\\\\c"; space="hello world"')
   });
 
-  it("formats empty parameters object as bare type", () => {
-    const result = format({ type: 'application/json', parameters: {} })
-    expect(result).toBe('application/json')
+  it("omits parameters when none are provided", () => {
+    const result = format({ type: 'image/png' })
+    expect(result).toBe('image/png')
   });
 
-  it("throws when obj is missing or not an object", () => {
-    expect(() => format()).toThrow(TypeError)
-    expect(() => format(null)).toThrow('argument obj is required')
-    expect(() => format('text/html')).toThrow('argument obj is required')
+  it("throws when argument object is missing", () => {
+    expect(() => format()).toThrow(new TypeError('argument obj is required'))
   });
 
   it("throws for invalid type or parameter name", () => {
-    expect(() => format({ type: 'invalid type' })).toThrow('invalid type')
-    expect(() => format({ type: 'text/html', parameters: { 'bad name': 'x' } })).toThrow('invalid parameter name')
-  });
-
-  it("quotes escaped characters in parameter values", () => {
-    const result = format({ type: 'text/plain', parameters: { title: 'a"b\\c' } })
-    expect(result).toBe('text/plain; title="a\\\"b\\\\c"')
+    expect(() => format({ type: 'not a type' })).toThrow(new TypeError('invalid type'))
+    expect(() => format({ type: 'text/plain', parameters: { 'bad name': 'x' } })).toThrow(new TypeError('invalid parameter name'))
   });
 });
 
 describe("parse", () => {
-  it("parses simple type string", () => {
-    const result = parse('Text/HTML')
+  it("parses type and parameters from a header string", () => {
+    const result = parse('Text/HTML; charset=utf-8; boundary=something')
     expect(result.type).toBe('text/html')
-    expect(result.parameters).toEqual({})
+    expect(result.parameters).toEqual({ charset: 'utf-8', boundary: 'something' })
   });
 
-  it("parses parameters and unescapes quoted values", () => {
-    const result = parse('text/html; charset=UTF-8; title="a\\"b\\\\c"')
-    expect(result.type).toBe('text/html')
-    expect(result.parameters).toEqual({ charset: 'UTF-8', title: 'a"b\\c' })
-  });
-
-  it("parses content-type from req-like object", () => {
-    const result = parse({ headers: { 'content-type': 'text/plain; foo=bar' } })
-    expect(result.type).toBe('text/plain')
-    expect(result.parameters).toEqual({ foo: 'bar' })
-  });
-
-  it("parses content-type from res-like object", () => {
-    const result = parse({ getHeader: name => name === 'content-type' ? 'application/json; version=1' : undefined })
+  it("parses quoted and escaped parameter values", () => {
+    const result = parse('application/json; title="a\\"b\\\\c"; empty=""')
     expect(result.type).toBe('application/json')
-    expect(result.parameters).toEqual({ version: '1' })
+    expect(result.parameters).toEqual({ title: 'a"b\\c', empty: '' })
   });
 
-  it("throws on missing header or non-string argument", () => {
-    expect(() => parse()).toThrow('argument string is required')
-    expect(() => parse('')).toThrow('argument string is required')
-    expect(() => parse({ headers: {} })).toThrow('content-type header is missing from object')
+  it("accepts req-like and res-like objects", () => {
+    const reqResult = parse({ headers: { 'content-type': 'text/plain; charset=utf-8' } })
+    const resResult = parse({ getHeader: (name) => name === 'content-type' ? 'text/plain; charset=utf-8' : undefined })
+    expect(reqResult.type).toBe('text/plain')
+    expect(reqResult.parameters).toEqual({ charset: 'utf-8' })
+    expect(resResult.type).toBe('text/plain')
+    expect(resResult.parameters).toEqual({ charset: 'utf-8' })
   });
 
-  it("throws for invalid media type or malformed parameters", () => {
-    expect(() => parse('text')).toThrow('invalid media type')
-    expect(() => parse('text/html; foo=bar; baz')).toThrow('invalid parameter format')
-    expect(() => parse('text/html; foo="unterminated')).toThrow('invalid parameter format')
+  it("throws on invalid or malformed media types", () => {
+    expect(() => parse('')).toThrow(new TypeError('argument string is required'))
+    expect(() => parse('text')).toThrow(new TypeError('invalid media type'))
+    expect(() => parse('text/plain; charset=utf-8; broken')).toThrow(new TypeError('invalid parameter format'))
   });
 });

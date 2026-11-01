@@ -2,28 +2,30 @@
 const escapeHtml = require("./index");
 
 describe("escapeHtml", () => {
-  it("returns the same string when no HTML characters are present", () => {
-    expect(escapeHtml('plain text')).toBe('plain text');
-    expect(escapeHtml('12345 abc XYZ')).toBe('12345 abc XYZ');
+  it("returns input unchanged when no escapable characters are present", () => {
+    expect(escapeHtml('plain text 123')).toBe('plain text 123');
+    expect(escapeHtml('ABCxyz_-.,')).toBe('ABCxyz_-.,');
   });
 
-  it("escapes all supported special characters", () => {
+  it("escapes all supported HTML special characters", () => {
     expect(escapeHtml(`"'&<>`)).toBe('&quot;&#39;&amp;&lt;&gt;');
     expect(escapeHtml('a"b&c<d>e\'f')).toBe('a&quot;b&amp;c&lt;d&gt;e&#39;f');
   });
 
-  it("leaves non-special characters and unicode intact around escapes", () => {
-    expect(escapeHtml('café & crème')).toBe('café &amp; crème');
-    expect(escapeHtml('😀<tag>')).toBe('😀&lt;tag&gt;');
+  it("preserves surrounding text while escaping characters in the middle", () => {
+    expect(escapeHtml('hello & welcome <user>')).toBe('hello &amp; welcome &lt;user&gt;');
+    expect(escapeHtml('x<y&z>')).toBe('x&lt;y&amp;z&gt;');
   });
 
-  it("converts null and undefined to their string representations", () => {
+  it("converts non-string inputs using string coercion", () => {
+    expect(escapeHtml(42)).toBe('42');
     expect(escapeHtml(null)).toBe('null');
     expect(escapeHtml(undefined)).toBe('undefined');
   });
 
-  it("escapes repeated adjacent special characters in order", () => {
+  it("handles empty string and strings with repeated escapable characters", () => {
+    expect(escapeHtml('')).toBe('');
     expect(escapeHtml('&&&&')).toBe('&amp;&amp;&amp;&amp;');
-    expect(escapeHtml('<<>>')).toBe('&lt;&lt;&gt;&gt;');
+    expect(escapeHtml('<<<<')).toBe('&lt;&lt;&lt;&lt;');
   });
 });

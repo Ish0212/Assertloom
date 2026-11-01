@@ -2,29 +2,36 @@
 const index = require("./index");
 
 describe("index", () => {
-  it("parses milliseconds with default unit", () => {
-    expect(index('250')).toBe(250);
+  it("formats zero milliseconds as short string", () => {
+    expect(index(0)).toBe('0ms');
+    expect(index(0, {})).toBe('0ms');
   });
 
-  it("parses a negative seconds value", () => {
-    expect(index('-2s')).toBe(-2000);
-  });
-
-  it("formats numbers as short strings by default", () => {
+  it("formats positive and negative numbers in short form", () => {
     expect(index(1500)).toBe('2s');
+    expect(index(-1500)).toBe('-1s');
   });
 
-  it("formats numbers as long strings when requested", () => {
-    expect(index(1500, { long: true })).toBe('2 seconds');
+  it("formats long form with pluralization rules", () => {
+    expect(index(60000, { long: true })).toBe('1 minute');
+    expect(index(90000, { long: true })).toBe('2 minutes');
+    expect(index(-3600000, { long: true })).toBe('-1 hour');
   });
 
-  it("returns undefined for overlong or invalid strings", () => {
-    expect(index('1'.repeat(101))).toBeUndefined();
+  it("parses string values with units and default milliseconds", () => {
+    expect(index('2 hours')).toBe(7200000);
+    expect(index('1.5m')).toBe(90000);
+    expect(index('42')).toBe(42);
+  });
+
+  it("returns undefined for unparsable or overlong strings", () => {
     expect(index('not a duration')).toBeUndefined();
+    expect(index('a'.repeat(101))).toBeUndefined();
   });
 
-  it("throws for invalid non-string non-number values", () => {
+  it("throws for invalid non-string non-number inputs", () => {
     expect(() => index(null)).toThrow('val is not a non-empty string or a valid number. val=null');
+    expect(() => index(undefined)).toThrow('val is not a non-empty string or a valid number. val=undefined');
     expect(() => index(NaN)).toThrow('val is not a non-empty string or a valid number. val=null');
   });
 });

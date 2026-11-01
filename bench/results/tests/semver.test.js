@@ -2,28 +2,28 @@
 const inc = require("./inc");
 
 describe("inc", () => {
-  it("increments a string version with a release type", () => {
+  it("increments a version string with release and identifier", () => {
     const result = inc('1.2.3', 'patch');
     expect(result).toBe('1.2.4');
   });
 
-  it("uses identifier when options argument is a string", () => {
+  it("supports string options argument by shifting identifier parameters", () => {
     const result = inc('1.2.3', 'prerelease', 'beta', 2);
     expect(result).toBe('1.2.4-beta.1');
   });
 
-  it("returns null for an invalid version string", () => {
+  it("returns null for an invalid version input", () => {
     const result = inc('not-a-version', 'patch');
     expect(result).toBeNull();
   });
 
-  it("returns null when the release type is invalid", () => {
+  it("returns null when release is invalid", () => {
     const result = inc('1.2.3', 'not-a-release');
     expect(result).toBeNull();
   });
 
-  it("increments prerelease with an explicit identifier base", () => {
-    const result = inc('1.2.3-beta.1', 'prerelease', undefined, 'beta', 0);
-    expect(result).toBe('1.2.3-beta.2');
+  it("increments a version string with prerelease base zero identifier", () => {
+    const result = inc('1.2.3', 'prerelease', undefined, 'beta', 0);
+    expect(result).toBe('1.2.4-beta.0');
   });
 });

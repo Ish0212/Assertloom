@@ -18,129 +18,75 @@ afterEach(() => {
 });
 
 describe("parse", () => {
-  it("parses key value pairs and strips quotes", () => {
-    const input = 'FOO=bar\nQUOTED="baz"\nSINGLE=\'qux\'';
-    expect(parse(input)).toEqual({ FOO: 'bar', QUOTED: 'baz', SINGLE: 'qux' });
+  it("parses simple key value pairs and strips comments", () => {
+    const result = parse('FOO=bar\nBAZ = qux # comment');
+    expect(result).toEqual({ FOO: 'bar', BAZ: 'qux' });
   });
 
-  it("expands escaped newlines and carriage returns in double quotes", () => {
-    const input = 'MULTI="line1\\nline2\\rline3"';
-    expect(parse(input)).toEqual({ MULTI: 'line1\nline2\rline3' });
+  it("handles quoted values and escaped newlines", () => {
+    const result = parse('A="line1\\nline2"\nB=\'single quoted\'\nC=`backtick`');
+    expect(result).toEqual({ A: 'line1\nline2', B: 'single quoted', C: 'backtick' });
   });
 
-  it("ignores comments and export prefix", () => {
-    const input = 'export FOO=bar # comment\n# whole line comment\nBAR=baz';
-    expect(parse(input)).toEqual({ FOO: 'bar', BAR: 'baz' });
+  it("converts carriage returns from buffer input", () => {
+    const result = parse(Buffer.from('WIN="a\\rb"\r\nPLAIN=value'));
+    expect(result).toEqual({ WIN: 'a\rb', PLAIN: 'value' });
   });
 
-  it("parses buffer input and preserves empty values", () => {
-    const input = Buffer.from('EMPTY=\nSPACED=   value   ');
-    expect(parse(input)).toEqual({ EMPTY: '', SPACED: 'value' });
-  });
-});
-
-describe("_parseVault", () => {
-  it("throws INVALID_DOTENV_KEY for malformed key", () => {
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    process.env.DOTENV_KEY = 'not-a-url';
-    expect(() => _parseVault({ path: '.env.vault' })).toThrow('INVALID_DOTENV_KEY: Wrong format. Must be in valid uri format like dotenv://:key_1234@dotenvx.com/vault/.env.vault?environment=development');
-  });
-
-  it("throws MISSING_DATA when parsed vault has no data", () => {
-    const fsMock = jest.mocked(fs);
-    fsMock.existsSync.mockReturnValue(true);
-    fsMock.readFileSync.mockReturnValue('DOTENV_VAULT_PRODUCTION=encrypted');
-    expect(() => _parseVault({ path: '.env.vault', DOTENV_KEY: 'dotenv://:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@dotenvx.com/vault/.env.vault?environment=staging' })).toThrow('NOT_FOUND_DOTENV_ENVIRONMENT: Cannot locate environment DOTENV_VAULT_STAGING in your .env.vault file.');
+  it("returns empty object for empty input", () => {
+    expect(parse('')).toEqual({});
   });
 });
 
-describe("_configVault", () => {
-  // Assertloom skipped this test: still failing after repair (runtime): TypeError: Cannot read properties of undefined (reading 'setAuthTag')
-  it.skip("loads parsed vault into provided processEnv", () => {
-    const processEnv = {};
-    const fsMock = jest.mocked(fs);
-    fsMock.existsSync.mockReturnValue(true);
-    fsMock.readFileSync.mockReturnValue('DOTENV_VAULT_PRODUCTION=encrypted');
-    const result = _configVault({ processEnv, DOTENV_KEY: 'dotenv://:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@dotenvx.com/vault/.env.vault?environment=production' });
-    expect(result).toHaveProperty('parsed');
-    expect(processEnv).toEqual(expect.objectContaining(result.parsed));
+describe("decrypt", () => {
+  it("decrypts valid ciphertext with aes-256-gcm", () => {
+    crypto.createDecipheriv.mockReturnValue({ setAuthTag: jest.fn(), update: jest.fn().mockReturnValue('plain'), final: jest.fn().mockReturnValue('text') });
+    const encrypted = Buffer.from('00000000000000000000000011111111111111111111111111111111111111111111111111111111', 'hex').toString('base64');
+    const result = decrypt(encrypted, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    expect(crypto.createDecipheriv).toHaveBeenCalledWith('aes-256-gcm', expect.any(Buffer), expect.any(Buffer));
+    expect(result).toBe('plaintext');
   });
 
-  it("defaults to process.env when no processEnv is provided", () => {
-    const fsMock = jest.mocked(fs);
-    fsMock.existsSync.mockReturnValue(true);
-    fsMock.readFileSync.mockReturnValue('DOTENV_VAULT_PRODUCTION=encrypted');
-    expect(() => _configVault({ DOTENV_KEY: 'dotenv://:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@dotenvx.com/vault/.env.vault?environment=production' })).toThrow();
-  });
-});
-
-describe("configDotenv", () => {
-  it("loads default .env file into process.env", () => {
-    const fsMock = jest.mocked(fs);
-    fsMock.readFileSync.mockReturnValue('FOO=bar');
-    const result = configDotenv();
-    expect(fsMock.readFileSync).toHaveBeenCalledWith(path.resolve(process.cwd(), '.env'), { encoding: 'utf8' });
-    expect(result).toEqual({ parsed: { FOO: 'bar' } });
+  it("throws INVALID_DOTENV_KEY when key is too short", () => {
+    crypto.createDecipheriv.mockImplementation(() => { throw new RangeError('Invalid key length'); });
+    const encrypted = Buffer.from('00000000000000000000000011111111111111111111111111111111111111111111111111111111', 'hex').toString('base64');
+    expect(() => decrypt(encrypted, 'short')).toThrow('INVALID_DOTENV_KEY: It must be 64 characters long (or more)');
   });
 
-  it("resolves home shortcut in custom path", () => {
-    const fsMock = jest.mocked(fs);
-    const osMock = jest.mocked(os);
-    osMock.homedir.mockReturnValue('/home/tester');
-    fsMock.readFileSync.mockReturnValue('X=1');
-    configDotenv({ path: '~/.customenv' });
-    expect(fsMock.readFileSync).toHaveBeenCalledWith(path.join(osMock.homedir(), '.customenv'), { encoding: 'utf8' });
+  it("throws DECRYPTION_FAILED when authentication fails", () => {
+    crypto.createDecipheriv.mockReturnValue({ setAuthTag: jest.fn(), update: jest.fn(), final: jest.fn(() => { throw new Error('Unsupported state or unable to authenticate data'); }) });
+    const encrypted = Buffer.from('00000000000000000000000011111111111111111111111111111111111111111111111111111111', 'hex').toString('base64');
+    expect(() => decrypt(encrypted, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')).toThrow('DECRYPTION_FAILED: Please check your DOTENV_KEY');
   });
 
-  it("returns parsed data and last error when one file fails", () => {
-    const fsMock = jest.mocked(fs);
-    fsMock.readFileSync
-      .mockImplementationOnce(() => { throw new Error('missing'); })
-      .mockImplementationOnce(() => 'B=2');
-    const result = configDotenv({ path: [path.resolve(process.cwd(), '.env'), path.resolve(process.cwd(), '.env.local')] });
-    expect(result.parsed).toEqual({ B: '2' });
-    expect(result.error).toBeInstanceOf(Error);
-    expect(result.error.message).toBe('missing');
-  });
-});
-
-describe("config", () => {
-  it("falls back to configDotenv when DOTENV_KEY is not set", () => {
-    delete process.env.DOTENV_KEY;
-    const result = config({ path: '.env' });
-    expect(result).toHaveProperty('parsed');
-  });
-
-  it("falls back to configDotenv when vault file is missing", () => {
-    process.env.DOTENV_KEY = 'dotenv://:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@dotenvx.com/vault/.env.vault?environment=production';
-    jest.mocked(fs).existsSync.mockReturnValue(false);
-    const result = config({ path: '.env' });
-    expect(result).toHaveProperty('parsed');
-  });
-
-  it("throws INVALID_DOTENV_KEY when the key is too short", () => {
-    const encrypted = Buffer.from('anything').toString('base64');
-    jest.mocked(crypto.createDecipheriv).mockImplementation(() => { throw new RangeError('bad'); });
-    expect(() => decrypt(encrypted, '1234')).toThrow('INVALID_DOTENV_KEY: It must be 64 characters long (or more)');
+  it("rethrows unexpected crypto errors", () => {
+    const error = new Error('unexpected');
+    crypto.createDecipheriv.mockImplementation(() => { throw error; });
+    const encrypted = Buffer.from('00000000000000000000000011111111111111111111111111111111111111111111111111111111', 'hex').toString('base64');
+    expect(() => decrypt(encrypted, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')).toThrow(error);
   });
 });
 
 describe("populate", () => {
-  it("adds new keys to the target object", () => {
-    const processEnv = {};
-    populate(processEnv, { FOO: 'bar', EMPTY: '' });
-    expect(processEnv).toEqual({ FOO: 'bar', EMPTY: '' });
+  it("writes missing keys into the target object", () => {
+    const processEnv = { EXISTING: 'keep' };
+    populate(processEnv, { NEW: 'value' });
+    expect(processEnv).toEqual({ EXISTING: 'keep', NEW: 'value' });
   });
 
-  it("does not overwrite existing keys without override", () => {
+  it("does not overwrite existing keys unless override is true", () => {
     const processEnv = { FOO: 'old' };
-    populate(processEnv, { FOO: 'new', BAR: 'baz' });
-    expect(processEnv).toEqual({ FOO: 'old', BAR: 'baz' });
+    populate(processEnv, { FOO: 'new' }, { override: false });
+    expect(processEnv).toEqual({ FOO: 'old' });
   });
 
   it("overwrites existing keys when override is true", () => {
     const processEnv = { FOO: 'old' };
     populate(processEnv, { FOO: 'new' }, { override: true });
     expect(processEnv).toEqual({ FOO: 'new' });
+  });
+
+  it("throws OBJECT_REQUIRED when parsed is not an object", () => {
+    expect(() => populate({}, null)).toThrow('Cannot convert undefined or null to object')
   });
 });

@@ -239,6 +239,46 @@ describe("analyzer: errors and safety", () => {
     expect(error).toMatchObject({ line: 1 });
   });
 
+  it("finds exports returned by a UMD factory", () => {
+    const js = (code: string) => analyzeSource(code, { inputPath: "inline.js", extension: ".js", language: "javascript" });
+    const slugifyStyle = js(
+      [
+        ";(function (name, root, factory) {",
+        "  if (typeof exports === 'object') { module.exports = factory(); module.exports['default'] = factory() }",
+        "  else if (typeof define === 'function' && define.amd) { define(factory) }",
+        "  else { root[name] = factory() }",
+        "}('slugify', this, function () {",
+        "  function helper (s) { return s.trim() }",
+        "  function replace (string, options) { return helper(string) }",
+        "  replace.extend = function (map) {}",
+        "  return replace",
+        "}))",
+      ].join("\n"),
+    );
+    expect(slugifyStyle.moduleSystem).toBe("commonjs");
+    expect(slugifyStyle.functions.map((f) => [f.name, f.exportedAs])).toEqual([
+      ["helper", []],
+      ["replace", ["default"]],
+    ]);
+
+    const objectStyle = js(
+      [
+        "(function (root, factory) {",
+        "  if (typeof module === 'object' && module.exports) module.exports = factory();",
+        "  else root.util = factory();",
+        "})(this, function () {",
+        "  return { add: function (a, b) { return a + b; }, twice(x) { return x * 2; } };",
+        "});",
+      ].join("\n"),
+    );
+    expect(objectStyle.functions.filter((f) => f.exported).map((f) => [f.name, f.exportedAs])).toEqual([
+      ["add", ["add"]],
+      ["twice", ["twice"]],
+    ]);
+
+    expect(js("(function (factory) { factory(); })(function () { return function f() {}; });").functions.filter((f) => f.exported)).toEqual([]);
+  });
+
   it("omits TypeScript's this parameter", () => {
     const analysis = analyzeSource("export function f(this: Window, x: number) { return x; }", { inputPath: "inline.ts", extension: ".ts", language: "typescript" });
 
