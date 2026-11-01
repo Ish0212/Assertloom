@@ -534,7 +534,8 @@ describe("action.yml", () => {
   it("pins an exact Assertloom version no older than this package", async () => {
     const action = await readFile(path.join(root, "action.yml"), "utf8");
     const { version } = JSON.parse(await readFile(path.join(root, "package.json"), "utf8")) as { version: string };
-    const pinned = /assertloom-version:\n(?:\s+description:.*\n)\s+default: "([^"]+)"/.exec(action)?.[1];
+    // Checkouts with core.autocrlf have CRLF line endings.
+    const pinned = /assertloom-version:\r?\n\s+description:.*\r?\n\s+default: "([^"]+)"/.exec(action)?.[1];
     expect(pinned).toMatch(/^\d+\.\d+\.\d+$/);
     const parts = (v: string) => v.split(".").map(Number);
     const [a, b] = [parts(pinned!), parts(version)];
