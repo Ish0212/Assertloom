@@ -4,6 +4,8 @@ All notable changes to Assertloom are documented here. The format follows [Keep 
 
 ## Unreleased
 
+## 0.2.0 - 2026-11-01
+
 ### Added
 
 - `--provider anthropic` (Claude models, `ANTHROPIC_API_KEY`) and `--provider openai-compatible` with `--base-url` for Ollama, LM Studio, vLLM, OpenRouter, and other servers with the OpenAI Chat Completions API. Claude prices are included in the spending limit.

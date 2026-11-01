@@ -12,7 +12,7 @@ Assertloom is an open-source CLI that reads a JavaScript or TypeScript file, gen
 
 <sub>A real session on [`examples/sample-project`](examples/sample-project/README.md), recorded with `scripts/record-demo.mjs` (pauses for the model shortened to 2 seconds). The raw recording is in `docs/demo.cast` and plays with `asciinema play docs/demo.cast`.</sub>
 
-> **Status: 0.1.0, first public release.** `analyze` statically extracts functions, dependencies, and how each import is used. `generate` writes Jest tests for every exported function, mocks the dependencies that do I/O (packages, databases, the file system, `fetch`), runs the tests with network access blocked, and repairs failing tests in up to three rounds within a spending limit. `run` reports pass/fail counts and coverage for any test file. On 9 files from 9 open-source packages, all 73 kept tests pass and mean line coverage goes from 0% to 88.6%, for $0.07 in total ([benchmark](#benchmark)).
+> **Status: 0.2.0.** `analyze` statically extracts functions, dependencies, and how each import is used. `generate` writes Jest tests for every exported function, mocks the dependencies that do I/O (packages, databases, the file system, `fetch`), runs the tests with network access blocked, and repairs failing tests in up to three rounds within a spending limit. `run` reports pass/fail counts and coverage for any test file. `ci` and the [GitHub Action](#github-action) do all of this for the files a pull request changes. On 9 files from 9 open-source packages, all 73 kept tests pass and mean line coverage goes from 0% to 88.6%, for $0.07 in total ([benchmark](#benchmark)).
 
 ## Install
 

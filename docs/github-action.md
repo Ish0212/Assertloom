@@ -80,8 +80,6 @@ Requirements: Node.js 22 or newer on the runner (the action checks and stops wit
 
 `Ish0212/Assertloom@v0.2.0` runs the action as released in that tag, and the action installs exactly `assertloom@0.2.0` from npm. It never installs a range or `latest`. For the strongest guarantee against a moved tag, pin the commit SHA of the release instead: `Ish0212/Assertloom@<40-character SHA> # v0.2.0`.
 
-The action is available from the first release that includes it (planned as 0.2.0). Until that release exists, `Ish0212/Assertloom@v0.2.0` will not resolve.
-
 ## Secrets
 
 The provider key is passed explicitly with `api-key`. The action never reads secrets on its own.
