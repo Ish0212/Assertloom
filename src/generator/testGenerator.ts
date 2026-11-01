@@ -15,6 +15,9 @@ import { validateGeneration, type RejectedCase, type ValidatedSuite } from "./va
 
 export class GenerationError extends UserError {}
 
+/** The next model call could exceed the spending limit, so it was not made. */
+export class BudgetExceededError extends GenerationError {}
+
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_OUTPUT_TOKENS = 32_000;
 
@@ -76,7 +79,11 @@ export async function generateTests(options: {
 
   const { budget } = options;
   if (budget && !budget.allows({ inputTokens: promptTokens(GENERATION_SYSTEM_PROMPT, prompt), outputTokens: MAX_OUTPUT_TOKENS })) {
-    throw new GenerationError(`Generating tests for ${analysis.file} could exceed the spending limit of ${formatUsd(budget.maxUsd)}; raise it with --max-cost.`);
+    throw new BudgetExceededError(
+      budget.priced
+        ? `Generating tests for ${analysis.file} could exceed the spending limit of ${formatUsd(budget.maxUsd)}; raise it with --max-cost.`
+        : `Generating tests for ${analysis.file} could exceed the spending limit of ${budget.describeLimit()}.`,
+    );
   }
 
   const response = await provider.generateStructured({

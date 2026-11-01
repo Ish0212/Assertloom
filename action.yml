@@ -1,0 +1,226 @@
+name: Assertloom
+description: Generate, run, and repair tests for JavaScript and TypeScript files changed in a pull request, and upload them for review.
+author: Ish0212
+branding:
+  icon: check-circle
+  color: purple
+
+# Every input reaches the shell through `env:` and is quoted there. Never put ${{ }} expressions inside `run:` scripts.
+inputs:
+  provider:
+    description: "LLM provider: openai, anthropic, or openai-compatible."
+    default: openai
+  model:
+    description: Model name. Empty uses the provider default (gpt-5.4-mini for openai, claude-haiku-5-5 for anthropic). Required for openai-compatible.
+    default: ""
+  api-key:
+    description: API key for the provider. Pass it from a secret, for example `secrets.OPENAI_API_KEY`. Optional for openai-compatible servers that need none.
+    default: ""
+  base-url:
+    description: Server URL for openai-compatible providers, such as https://openrouter.ai/api/v1.
+    default: ""
+  files:
+    description: Newline-separated files to process instead of the pull request diff. Use for workflow_dispatch and other non-pull-request runs.
+    default: ""
+  base:
+    description: Base commit to diff against. Empty uses the pull request's base commit.
+    default: ""
+  head:
+    description: Head commit. Empty uses the checked-out commit (HEAD).
+    default: ""
+  include:
+    description: Only consider files matching these globs (newline- or comma-separated), for example `src/**`.
+    default: ""
+  exclude:
+    description: Skip files matching these globs, in addition to the default exclusions.
+    default: ""
+  default-excludes:
+    description: Skip tests, node_modules, build output, type declarations, minified, and generated files.
+    default: "true"
+  max-files:
+    description: Process at most this many files. The rest are reported as skipped.
+    default: "10"
+  max-cost:
+    description: Spending limit in US dollars for the whole run, shared by every file and repair round.
+    default: "1"
+  max-tokens:
+    description: Shared token limit for the whole run. Required for models without a known price (openai-compatible); monetary cost is then reported as unknown.
+    default: ""
+  max-attempts:
+    description: Repair rounds per file (0-3).
+    default: "3"
+  timeout:
+    description: Time limit in seconds for each test run.
+    default: "120"
+  fail-on:
+    description: "When the step fails: never, errors (a selected file could not be processed), or tests (also any generated test that does not pass)."
+    default: errors
+  working-directory:
+    description: Directory inside the repository to run in.
+    default: "."
+  report-dir:
+    description: Directory for report.json, summary.md, and tests/. Empty uses $RUNNER_TEMP/assertloom-report, outside the checkout.
+    default: ""
+  upload-artifact:
+    description: Upload the report directory as a workflow artifact.
+    default: "true"
+  artifact-name:
+    description: Name of the uploaded artifact.
+    default: assertloom-report
+  retention-days:
+    description: Days to keep the artifact.
+    default: "14"
+  dry-run:
+    description: Select files and write the report without calling a model or running tests. Needs no API key.
+    default: "false"
+  assertloom-version:
+    description: Exact Assertloom version installed from npm. Keep the default, which matches this action's release.
+    default: "0.2.0"
+  assertloom-tarball:
+    description: Path to a local Assertloom .tgz to install instead of the npm release. For testing the action before a release.
+    default: ""
+
+outputs:
+  result:
+    description: "passed, failed (the fail-on policy was violated), or error (Assertloom could not run)."
+    value: ${{ steps.run.outputs.result }}
+  report-dir:
+    description: Directory with report.json, summary.md, and tests/.
+    value: ${{ steps.run.outputs.report-dir }}
+  report-path:
+    description: Path of report.json.
+    value: ${{ steps.run.outputs.report-path }}
+  summary-path:
+    description: Path of summary.md.
+    value: ${{ steps.run.outputs.summary-path }}
+  files-selected:
+    description: Eligible changed files.
+    value: ${{ steps.run.outputs.files-selected }}
+  files-processed:
+    description: Files whose tests were generated and run.
+    value: ${{ steps.run.outputs.files-processed }}
+  files-skipped:
+    description: Files skipped (deleted, excluded, unsupported, over the file limit, or over the budget).
+    value: ${{ steps.run.outputs.files-skipped }}
+  files-failed:
+    description: Selected files that could not be processed.
+    value: ${{ steps.run.outputs.files-failed }}
+  tests-final-passed:
+    description: Generated tests passing at the end.
+    value: ${{ steps.run.outputs.tests-final-passed }}
+  tests-final-failed:
+    description: Generated tests still failing at the end.
+    value: ${{ steps.run.outputs.tests-final-failed }}
+  budget-exhausted:
+    description: true if the shared spending limit stopped the run early.
+    value: ${{ steps.run.outputs.budget-exhausted }}
+  artifact-id:
+    description: ID of the uploaded artifact.
+    value: ${{ steps.upload.outputs.artifact-id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check Node.js version
+      shell: bash
+      run: |
+        node -e 'const major = Number(process.versions.node.split(".")[0]); if (major < 22) { console.log(`::error::Assertloom needs Node.js 22 or newer (found ${process.version}). Add actions/setup-node with node-version: 22 before this action.`); process.exit(1); }'
+
+    - name: Check for persisted Git credentials
+      shell: bash
+      env:
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: |
+        if git -C "$INPUT_WORKING_DIRECTORY" config --get-regexp '^http\..*\.extraheader$' > /dev/null 2>&1; then
+          echo "::warning::The checkout kept a GitHub token in its Git config, where generated tests could read it. Use actions/checkout with persist-credentials: false."
+        fi
+
+    - name: Install Assertloom
+      id: install
+      shell: bash
+      env:
+        ASSERTLOOM_VERSION: ${{ inputs.assertloom-version }}
+        ASSERTLOOM_TARBALL: ${{ inputs.assertloom-tarball }}
+      run: |
+        set -euo pipefail
+        dir="$RUNNER_TEMP/assertloom-cli"
+        if [ -n "$ASSERTLOOM_TARBALL" ]; then
+          case "$ASSERTLOOM_TARBALL" in
+            *.tgz) ;;
+            *) echo "::error::assertloom-tarball must be a .tgz file"; exit 1 ;;
+          esac
+          spec="$(cd "$(dirname -- "$ASSERTLOOM_TARBALL")" && pwd)/$(basename -- "$ASSERTLOOM_TARBALL")"
+        elif [[ "$ASSERTLOOM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+          spec="assertloom@$ASSERTLOOM_VERSION"
+        else
+          echo "::error::assertloom-version must be an exact version such as 0.2.0, not a range or tag"
+          exit 1
+        fi
+        mkdir -p "$dir"
+        # --ignore-scripts: no package install scripts run on the runner.
+        npm install --prefix "$dir" --no-save --no-audit --no-fund --ignore-scripts --loglevel=error -- "$spec"
+        echo "bin=$dir/node_modules/assertloom/dist/cli/index.js" >> "$GITHUB_OUTPUT"
+
+    - name: Generate and evaluate tests
+      id: run
+      shell: bash
+      env:
+        ASSERTLOOM_BIN: ${{ steps.install.outputs.bin }}
+        INPUT_PROVIDER: ${{ inputs.provider }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_BASE_URL: ${{ inputs.base-url }}
+        INPUT_FILES: ${{ inputs.files }}
+        INPUT_BASE: ${{ inputs.base || github.event.pull_request.base.sha }}
+        INPUT_HEAD: ${{ inputs.head }}
+        INPUT_INCLUDE: ${{ inputs.include }}
+        INPUT_EXCLUDE: ${{ inputs.exclude }}
+        INPUT_DEFAULT_EXCLUDES: ${{ inputs.default-excludes }}
+        INPUT_MAX_FILES: ${{ inputs.max-files }}
+        INPUT_MAX_COST: ${{ inputs.max-cost }}
+        INPUT_MAX_TOKENS: ${{ inputs.max-tokens }}
+        INPUT_MAX_ATTEMPTS: ${{ inputs.max-attempts }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_REPORT_DIR: ${{ inputs.report-dir }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
+        # Only the variable for the selected provider is set. Assertloom removes credential-like variables
+        # before running tests and redacts these values from everything it writes.
+        OPENAI_API_KEY: ${{ inputs.provider == 'openai' && inputs.api-key || '' }}
+        ANTHROPIC_API_KEY: ${{ inputs.provider == 'anthropic' && inputs.api-key || '' }}
+        ASSERTLOOM_API_KEY: ${{ inputs.provider == 'openai-compatible' && inputs.api-key || '' }}
+      run: |
+        set -euo pipefail
+        report_dir="${INPUT_REPORT_DIR:-$RUNNER_TEMP/assertloom-report}"
+        args=(ci
+          --provider "$INPUT_PROVIDER"
+          --model "$INPUT_MODEL"
+          --base-url "$INPUT_BASE_URL"
+          --files "$INPUT_FILES"
+          --include "$INPUT_INCLUDE"
+          --exclude "$INPUT_EXCLUDE"
+          --max-files "$INPUT_MAX_FILES"
+          --max-cost "$INPUT_MAX_COST"
+          --max-tokens "$INPUT_MAX_TOKENS"
+          --max-attempts "$INPUT_MAX_ATTEMPTS"
+          --timeout "$INPUT_TIMEOUT"
+          --fail-on "$INPUT_FAIL_ON"
+          --working-directory "$INPUT_WORKING_DIRECTORY"
+          --out "$report_dir"
+          --github-summary "$GITHUB_STEP_SUMMARY"
+          --github-output "$GITHUB_OUTPUT")
+        if [ -z "$INPUT_FILES" ]; then args+=(--base "$INPUT_BASE" --head "$INPUT_HEAD"); fi
+        if [ "$INPUT_DEFAULT_EXCLUDES" = "false" ]; then args+=(--no-default-excludes); fi
+        if [ "$INPUT_DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+        node "$ASSERTLOOM_BIN" "${args[@]}"
+
+    - name: Upload generated tests and report
+      id: upload
+      if: always() && inputs.upload-artifact == 'true' && steps.run.outputs.report-dir != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.run.outputs.report-dir }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: warn
+        include-hidden-files: false

@@ -27,6 +27,12 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match package.json version $version" >&2
             exit 1
           fi
+          # The GitHub Action installs this exact npm version; it must match the release it is tagged with.
+          action_version=$(awk '/^  assertloom-version:/ {found=1} found && /default:/ {gsub(/[" ]/, "", $2); print $2; exit}' action.yml)
+          if [ "$action_version" != "$version" ]; then
+            echo "action.yml installs assertloom@$action_version, but this release is $version. Update assertloom-version in action.yml." >&2
+            exit 1
+          fi
 
       - run: npm ci
       - run: npm run typecheck

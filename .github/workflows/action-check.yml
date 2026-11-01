@@ -1,0 +1,95 @@
+name: Action check
+
+# Runs action.yml from this checkout against the consumer fixture (fixtures/ci/makeConsumer.mjs).
+# The dry run needs no secrets and spends nothing. The live run calls a model and only runs when started by hand.
+on:
+  push:
+    branches: [main]
+    paths: ["action.yml", "src/**", "fixtures/ci/**", ".github/workflows/action-check.yml"]
+  pull_request:
+    paths: ["action.yml", "src/**", "fixtures/ci/**", ".github/workflows/action-check.yml"]
+  workflow_dispatch:
+    inputs:
+      live:
+        description: Also run against a real model (uses the OPENAI_API_KEY secret, at most $0.05)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Pack this version
+        id: pack
+        run: echo "tarball=$RUNNER_TEMP/$(npm pack --pack-destination "$RUNNER_TEMP" --silent)" >> "$GITHUB_OUTPUT"
+      - name: Create the consumer fixture
+        id: fixture
+        run: echo "base=$(node fixtures/ci/makeConsumer.mjs "$RUNNER_TEMP/consumer")" >> "$GITHUB_OUTPUT"
+
+      - name: Run the action (dry run)
+        id: assertloom
+        uses: ./
+        with:
+          working-directory: ${{ runner.temp }}/consumer
+          base: ${{ steps.fixture.outputs.base }}
+          dry-run: "true"
+          assertloom-tarball: ${{ steps.pack.outputs.tarball }}
+          artifact-name: assertloom-dry-run
+          retention-days: "1"
+
+      - name: Check outputs
+        env:
+          RESULT: ${{ steps.assertloom.outputs.result }}
+          SELECTED: ${{ steps.assertloom.outputs.files-selected }}
+          REPORT: ${{ steps.assertloom.outputs.report-path }}
+        run: |
+          test "$RESULT" = "passed"
+          test "$SELECTED" = "4"
+          node -e 'const r = require(process.argv[1]); if (r.files.length !== 11) process.exit(1)' "$REPORT"
+          test -z "$(git -C "$RUNNER_TEMP/consumer" status --porcelain)"
+
+  live:
+    if: github.event_name == 'workflow_dispatch' && inputs.live
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Pack this version
+        id: pack
+        run: echo "tarball=$RUNNER_TEMP/$(npm pack --pack-destination "$RUNNER_TEMP" --silent)" >> "$GITHUB_OUTPUT"
+      - name: Create the consumer fixture
+        id: fixture
+        run: echo "base=$(node fixtures/ci/makeConsumer.mjs "$RUNNER_TEMP/consumer")" >> "$GITHUB_OUTPUT"
+      - name: Run the action (live)
+        uses: ./
+        with:
+          api-key: ${{ secrets.OPENAI_API_KEY }}
+          working-directory: ${{ runner.temp }}/consumer
+          base: ${{ steps.fixture.outputs.base }}
+          max-cost: "0.05"
+          max-files: "3"
+          fail-on: never
+          assertloom-tarball: ${{ steps.pack.outputs.tarball }}
+          artifact-name: assertloom-live
+          retention-days: "3"

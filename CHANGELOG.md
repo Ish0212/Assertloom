@@ -9,10 +9,15 @@ All notable changes to Assertloom are documented here. The format follows [Keep 
 - `--provider anthropic` (Claude models, `ANTHROPIC_API_KEY`) and `--provider openai-compatible` with `--base-url` for Ollama, LM Studio, vLLM, OpenRouter, and other servers with the OpenAI Chat Completions API. Claude prices are included in the spending limit.
 - UMD modules: exports returned by a UMD factory are analyzed and tested. `slugify` in the benchmark now gets tests.
 - The benchmark takes `--provider` and `--base-url`.
+- GitHub Action (`action.yml`, `uses: Ish0212/Assertloom@v0.2.0`): generates, runs, and repairs tests for the JavaScript and TypeScript files a pull request changes, writes a job summary, and uploads the generated test previews, `report.json`, and `summary.md` as an artifact. It never commits, pushes, or comments. It installs an exact Assertloom version (`--ignore-scripts`), passes every input through environment variables rather than shell interpolation, and warns when the checkout kept a GitHub token. Guide: [docs/github-action.md](docs/github-action.md); copyable workflow with a fork guard: `examples/github-action/assertloom.yml`.
+- `assertloom ci`: the command the action runs, also usable locally or in other CI systems. It selects added, modified, and renamed files from `git diff base...head` (deleted, unsupported, excluded, generated, and symlinked files are reported as skipped), or takes `--files` for manual runs. One spending limit (`--max-cost`, or `--max-tokens` for models without a known price) is shared by every file and repair round. It stops starting files when the limit or `--max-files` is reached, continues after per-file failures, writes partial results after every file, and applies an explicit `--fail-on never|errors|tests` policy. Credentials are redacted from everything it writes. `--dry-run` shows the selection without a model or key.
+- `Budget` takes an optional token limit, and `generateTests` throws `BudgetExceededError` (a `GenerationError`) when the next call could exceed the limit.
+- CI workflow `action-check.yml` runs the action from the repository against a fixture pull request in dry-run mode on every change, and against a real model only when started by hand.
 
 ### Changed
 
 - Releases are published with npm trusted publishing (OIDC) instead of a stored token.
+- The release workflow checks that the version `action.yml` installs matches the tag.
 - Benchmark rerun with the 0.1.0 review fixes and UMD support: 73/73 kept tests pass and mean line coverage is 88.6% across 9 files.
 
 ## 0.1.0 - 2026-10-31

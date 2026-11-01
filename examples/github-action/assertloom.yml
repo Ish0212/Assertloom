@@ -1,0 +1,49 @@
+# Copy to .github/workflows/assertloom.yml in your repository and add an OPENAI_API_KEY secret.
+# Docs: https://github.com/Ish0212/Assertloom/blob/main/docs/github-action.md
+name: Assertloom
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      files:
+        description: Newline-separated files to generate tests for
+        required: true
+
+# Read-only token. Assertloom never comments, pushes, or opens pull requests.
+permissions:
+  contents: read
+
+concurrency:
+  group: assertloom-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate-tests:
+    # Pull requests from forks run code you have not reviewed and get no secrets, so skip them.
+    # Dependabot pull requests get no Actions secrets either.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the base commit must be available to find changed files
+          persist-credentials: false # keep the GitHub token out of reach of generated tests
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # Generated tests import your code, so its dependencies must be installed.
+      - run: npm ci
+
+      - uses: Ish0212/Assertloom@v0.2.0 # or pin a full commit SHA
+        with:
+          api-key: ${{ secrets.OPENAI_API_KEY }}
+          files: ${{ inputs.files }}
+          max-files: "10"
+          max-cost: "0.50"
