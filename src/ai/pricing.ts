@@ -1,8 +1,25 @@
 import type { TokenUsage } from "./provider.js";
 
-/** Standard OpenAI prices in USD per 1M tokens, from https://platform.openai.com/docs/pricing on 2026-10-31. */
+/**
+ * Standard prices in USD per 1M tokens, checked on 2026-10-31 at https://platform.openai.com/docs/pricing and
+ * https://platform.claude.com/docs/en/about-claude/pricing. Claude Haiku 5.5 is priced for prompts up to 100K tokens.
+ */
 export const PRICES_CHECKED = "2026-10-31";
 const PRICES: Record<string, { input: number; output: number }> = {
+  "claude-fable-5-1": { input: 10, output: 50 },
+  "claude-fable-5": { input: 10, output: 50 },
+  "claude-opus-5-5": { input: 4, output: 20 },
+  "claude-opus-5": { input: 5, output: 25 },
+  "claude-opus-4-8": { input: 5, output: 25 },
+  "claude-opus-4-7": { input: 5, output: 25 },
+  "claude-opus-4-6": { input: 5, output: 25 },
+  "claude-opus-4-5": { input: 5, output: 25 },
+  "claude-sonnet-5-5": { input: 2, output: 10 },
+  "claude-sonnet-5": { input: 2, output: 10 },
+  "claude-sonnet-4-6": { input: 3, output: 15 },
+  "claude-sonnet-4-5": { input: 3, output: 15 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5 },
+  "claude-haiku-4-5": { input: 1, output: 5 },
   "gpt-6-astra": { input: 10, output: 50 },
   "gpt-6.1-sol": { input: 2, output: 10 },
   "gpt-6.1-terra": { input: 1, output: 5 },
@@ -27,10 +44,10 @@ const PRICES: Record<string, { input: number; output: number }> = {
   "gpt-4o-mini": { input: 0.15, output: 0.6 },
 };
 
-/** Prices for a model name, including dated snapshots such as `gpt-5.4-mini-2026-03-17`. */
+/** Prices for a model name, including dated snapshots such as `gpt-5.4-mini-2026-03-17` or `claude-haiku-4-5-20251001`. */
 export function priceFor(model: string): { input: number; output: number } | undefined {
   if (PRICES[model]) return PRICES[model];
-  const snapshot = /^(.*)-\d{4}-\d{2}-\d{2}$/.exec(model);
+  const snapshot = /^(.*)-(?:\d{4}-\d{2}-\d{2}|\d{8})$/.exec(model);
   return snapshot ? PRICES[snapshot[1]] : undefined;
 }
 

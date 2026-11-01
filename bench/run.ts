@@ -13,7 +13,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { createProvider } from "../src/ai/index.js";
+import { createProvider, type ProviderOptions } from "../src/ai/index.js";
 import { Budget, formatUsd, PRICES_CHECKED } from "../src/ai/pricing.js";
 import { validateSourceFile } from "../src/cli/validateFile.js";
 import { generateTests, writeTestFile, type GenerationResult } from "../src/generator/index.js";
@@ -62,9 +62,9 @@ const withInfra = (result: RunResult): RunSummary & { infra?: string } => ({
   ...(result.infra ? { infra: `${result.infra.kind}: ${result.infra.message.split("\n")[0]}` } : {}),
 });
 
-async function benchmark(target: Target, model: string | undefined, maxCost: number, testsDir: string): Promise<TargetResult> {
+async function benchmark(target: Target, providerName: string, options: ProviderOptions, maxCost: number, testsDir: string): Promise<TargetResult> {
   const workDir = await mkdtemp(path.join(os.tmpdir(), "assertloom-bench-"));
-  const provider = createProvider("openai", model);
+  const provider = createProvider(providerName, options);
   const budget = new Budget(provider.model, maxCost);
   const result: TargetResult = {
     package: target.package,
@@ -264,7 +264,9 @@ ${rows.join("\n")}
 async function main() {
   const { values } = parseArgs({
     options: {
+      provider: { type: "string", default: "openai" },
       model: { type: "string" },
+      "base-url": { type: "string" },
       only: { type: "string" },
       "max-cost": { type: "string", default: "0.5" },
     },
@@ -273,7 +275,8 @@ async function main() {
   const targets = only ? TARGETS.filter((t) => only.includes(t.package.split("@")[0])) : TARGETS;
   if (targets.length === 0) throw new Error(`No targets match --only ${values.only}`);
 
-  const model = createProvider("openai", values.model).model;
+  const providerOptions: ProviderOptions = { model: values.model, baseUrl: values["base-url"] };
+  const model = createProvider(values.provider, providerOptions).model;
   const testsDir = path.join(resultsDir, "tests");
   await rm(testsDir, { recursive: true, force: true });
   await mkdir(testsDir, { recursive: true });
@@ -281,7 +284,7 @@ async function main() {
   const results: TargetResult[] = [];
   for (const target of targets) {
     process.stdout.write(`${target.package} ${target.file} ... `);
-    const result = await benchmark(target, values.model, Number(values["max-cost"]), testsDir);
+    const result = await benchmark(target, values.provider, providerOptions, Number(values["max-cost"]), testsDir);
     results.push(result);
     console.log(
       result.error
@@ -294,8 +297,8 @@ async function main() {
   const meta = {
     Date: new Date().toISOString().slice(0, 10),
     Assertloom: pkg.version,
-    Model: model,
-    Prices: `OpenAI standard rates checked ${PRICES_CHECKED}`,
+    Model: `${model} (${values.provider})`,
+    Prices: `standard API rates checked ${PRICES_CHECKED}`,
     Node: process.version,
     OS: `${os.platform()} ${os.arch()}`,
     "Spending limit": `$${values["max-cost"]} per file`,

@@ -14,6 +14,7 @@ import { validateSourceFile } from "../validateFile.js";
 interface GenerateOptions {
   provider: string;
   model?: string;
+  baseUrl?: string;
   out?: string;
   dryRun?: boolean;
   force?: boolean;
@@ -117,6 +118,7 @@ export function registerGenerateCommand(program: Command): void {
     .argument("<file>", "path to a JavaScript or TypeScript source file")
     .addOption(new Option("--provider <name>", "LLM provider").choices(PROVIDERS).default("openai"))
     .option("--model <model>", "model name (default: $ASSERTLOOM_MODEL or the provider default)")
+    .option("--base-url <url>", "server URL for --provider openai-compatible (default: $ASSERTLOOM_BASE_URL)")
     .option("--out <path>", "where to write the tests (default: <file>.test.preview.<ext>, promoted to <file>.test.<ext> when all pass)")
     .option("--dry-run", "print the generated tests instead of writing or running them")
     .option("--no-run", "write the preview file without running it")
@@ -136,7 +138,7 @@ export function registerGenerateCommand(program: Command): void {
       const maxCost = Number(options.maxCost);
       if (!Number.isFinite(maxCost) || maxCost <= 0) throw new UserError("--max-cost must be a positive number of US dollars.");
       const source = await validateSourceFile(file);
-      const provider = createProvider(options.provider, options.model);
+      const provider = createProvider(options.provider, { model: options.model, baseUrl: options.baseUrl });
       const budget = new Budget(provider.model, maxCost);
       const testPath = options.out ? path.resolve(options.out) : undefined;
       const allowNetwork = !!options.allowNetwork;
