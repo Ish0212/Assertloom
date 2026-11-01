@@ -340,7 +340,7 @@ All eight milestones are done: CLI foundation, AST analyzer, AI test generation,
 
 Bug reports, benchmark results on other projects, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and guidelines, and [SECURITY.md](SECURITY.md) for reporting vulnerabilities privately.
 
-Releases are published to npm by the [release workflow](.github/workflows/release.yml) when a `v*` tag is pushed, with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) linking each version to the commit and workflow run that built it.
+Releases are published to npm by the [release workflow](.github/workflows/release.yml) when a `v*` tag is pushed, with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) linking each version to the commit and workflow run that built it. If npm stages a version for review (it does for a package's first release), a maintainer approves it with 2FA in the package's Staged Packages tab on npmjs.com or with `npm stage approve <stage-id>` before it becomes installable.
 
 ## License
 
