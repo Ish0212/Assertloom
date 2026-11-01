@@ -18,7 +18,7 @@ All notable changes to Assertloom are documented here. The format follows [Keep 
 
 ### Changed
 
-- Releases are published with npm trusted publishing (OIDC) instead of a stored token.
+- Releases are published from GitHub Actions with npm provenance, using npm trusted publishing (OIDC) once it is configured for the package and an `NPM_TOKEN` secret until then.
 - The release workflow checks that the version `action.yml` installs matches the tag.
 - Benchmark rerun with the 0.1.0 review fixes and UMD support: 73/73 kept tests pass and mean line coverage is 88.6% across 9 files.
 

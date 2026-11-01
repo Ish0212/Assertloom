@@ -39,9 +39,12 @@ jobs:
       - run: npm test
       - run: npm run build
 
-      # Trusted publishing (OIDC, configured on npmjs.com) needs npm 11.5.1 or later; no token is stored.
+      # npm uses trusted publishing (OIDC, configured on npmjs.com; needs npm 11.5.1 or later) when it is set up
+      # for this package, and otherwise the NPM_TOKEN secret: a granular token limited to publishing assertloom.
       - run: npm install -g npm@11
       - name: Publish to npm with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
 
       - name: Create GitHub release
