@@ -1,12 +1,18 @@
 # Assertloom
 
+[![npm](https://img.shields.io/npm/v/assertloom)](https://www.npmjs.com/package/assertloom)
+[![CI](https://github.com/Ish0212/Assertloom/actions/workflows/ci.yml/badge.svg)](https://github.com/Ish0212/Assertloom/actions/workflows/ci.yml)
+[![npm provenance](https://img.shields.io/badge/npm-provenance-blue)](https://www.npmjs.com/package/assertloom#provenance)
+[![Node](https://img.shields.io/node/v/assertloom)](package.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 Assertloom is an open-source CLI that reads a JavaScript or TypeScript file, generates Jest unit tests for it, runs them, repairs the ones that fail, and reports coverage. It doesn't assume generated tests are correct. Every test is run before it is kept.
 
 ![Terminal recording: npx assertloom generate src/rates.js mocks fetch, generates 8 tests, runs them with the network blocked, and saves them with 100% coverage](docs/demo.svg)
 
 <sub>A real session on [`examples/sample-project`](examples/sample-project/README.md), recorded with `scripts/record-demo.mjs` (pauses for the model shortened to 2 seconds). The raw recording is in `docs/demo.cast` and plays with `asciinema play docs/demo.cast`.</sub>
 
-> **Status: 0.1.0, first public release.** `analyze` statically extracts functions, dependencies, and how each import is used. `generate` writes Jest tests for every exported function, mocks the dependencies that do I/O (packages, databases, the file system, `fetch`), runs the tests with network access blocked, and repairs failing tests in up to three rounds within a spending limit. `run` reports pass/fail counts and coverage for any test file. On 9 files from 9 open-source packages, 98.7% of the kept tests pass and mean line coverage goes from 0% to 95%, for $0.07 in total ([benchmark](#benchmark)).
+> **Status: 0.1.0, first public release.** `analyze` statically extracts functions, dependencies, and how each import is used. `generate` writes Jest tests for every exported function, mocks the dependencies that do I/O (packages, databases, the file system, `fetch`), runs the tests with network access blocked, and repairs failing tests in up to three rounds within a spending limit. `run` reports pass/fail counts and coverage for any test file. On 9 files from 9 open-source packages, all 73 kept tests pass and mean line coverage goes from 0% to 88.6%, for $0.07 in total ([benchmark](#benchmark)).
 
 ## Install
 
@@ -55,11 +61,11 @@ Add `--json` for the full analysis object. Each function includes its export nam
 - How each imported value is used: called, constructed with `new`, used with `instanceof`, which members are accessed, and whether a call's result is kept (and whether that happens when the module loads). Mocks are built from this.
 - Uses of the global `fetch` (unless the code declares its own `fetch`)
 
-Classes, object methods outside `module.exports`, and UMD wrappers (`(function (root, factory) { ... })(this, function () { ... })`) are not analyzed yet.
+UMD wrappers (`(function (root, factory) { ... })(this, function () { ... })`) are recognized: whatever the factory returns is treated as the module's exports. Classes and object methods outside `module.exports` are not analyzed yet.
 
 ## Generating tests
 
-`generate` needs an OpenAI API key in the `OPENAI_API_KEY` environment variable.
+By default `generate` uses OpenAI and needs an API key in the `OPENAI_API_KEY` environment variable. Anthropic and local or OpenAI-compatible models are supported too; see below.
 
 ```powershell
 # PowerShell (current session)
@@ -80,6 +86,21 @@ npx assertloom generate examples/math.ts --model gpt-5.4  # pick a model
 From a source checkout, use `npm run dev -- generate ...` instead of `npx assertloom generate ...`.
 
 The default model is `gpt-5.4-mini`. Override it with `--model` or `ASSERTLOOM_MODEL`.
+
+Other providers are selected with `--provider`:
+
+| Provider | Key | Default model | Notes |
+| --- | --- | --- | --- |
+| `openai` (default) | `OPENAI_API_KEY` | `gpt-5.4-mini` | |
+| `anthropic` | `ANTHROPIC_API_KEY` | `claude-haiku-5-5` | Uses structured JSON output |
+| `openai-compatible` | `ASSERTLOOM_API_KEY` (optional) | none; `--model` is required | Any server with the OpenAI Chat Completions API and JSON-schema output: Ollama, LM Studio, vLLM, OpenRouter. Set the URL with `--base-url` or `ASSERTLOOM_BASE_URL`. |
+
+```bash
+npx assertloom generate src/price.ts --provider anthropic --model claude-sonnet-5-5
+npx assertloom generate src/price.ts --provider openai-compatible --base-url http://localhost:11434/v1 --model qwen3-coder
+```
+
+The spending limit uses published prices for OpenAI and Anthropic models. For models without a known price (local or OpenAI-compatible ones), `--max-cost` can't be applied, so each run is capped at 500,000 tokens instead.
 
 `examples/strings.test.ts`, `examples/math.test.ts`, and `examples/users.test.ts` are unedited output from `gpt-5.4-mini`. For `strings.ts`, 24 of 26 generated tests passed on the first run, and one repair round fixed the other 2, ending at 26/26 passing with 100% coverage. `users.ts` depends on two external packages (`axios` and `pg`); see [Mocking dependencies](#mocking-dependencies).
 
@@ -227,46 +248,46 @@ How the runner works:
 
 `npm run bench` downloads one file from each of nine independent open-source packages, pinned to exact versions (`bench/targets.ts`), and runs the full pipeline on each: generate, run, and repair. It records generation, execution, and repair success rates, runtime, model cost, and coverage. Results are written to `bench/results/latest.json` and `latest.md`, and the final test files to `bench/results/tests/`. It needs `OPENAI_API_KEY`; use `--only ms,cookie` for a subset and `--model` to compare models.
 
-Results from 2026-10-31 with `gpt-5.4-mini`, Node 24.11.1 on Windows, $0.50 limit per file:
+Results from 2026-11-01 with `gpt-5.4-mini`, Node 24.11.1 on Windows, $0.50 limit per file:
 
 | Target | Functions tested | Valid cases | First run | Final | Repair rounds | Lines | Branches | Time | Cost | Mocked |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `ms@2.1.3` index.js | 1/1 | 6/6 | 6/6 | 6/6 passing | 0 | 86.41% | 33.89% | 6.4s | $0.0026 | – |
-| `bytes@3.1.2` index.js | 3/3 | 15/15 | 12/15 | 15/15 passing | 1 | 98.23% | 93.47% | 12.6s | $0.0088 | – |
-| `escape-html@1.0.3` index.js | 1/1 | 5/5 | 5/5 | 5/5 passing | 0 | 100% | 100% | 6.2s | $0.0024 | – |
-| `content-type@1.0.5` index.js | 2/2 | 12/12 | 12/12 | 12/12 passing | 0 | 97.33% | 91.89% | 7.7s | $0.0054 | – |
-| `cookie@0.7.2` index.js | 2/2 | 11/11 | 11/11 | 11/11 passing | 0 | 93.73% | 82.66% | 8.0s | $0.0063 | – |
-| `camelcase@8.0.0` index.js | 1/1 | 6/6 | 6/6 | 6/6 passing | 0 | 100% | 95.83% | 7.0s | $0.0033 | – |
-| `slugify@1.6.6` slugify.js | 0/0 | 0/0 | – | error: no exported functions found | 0 | – | – | 1.8s | $0.0000 | – |
-| `semver@7.6.3` functions/inc.js | 1/1 | 5/6 | 4/5 | 5/5 passing | 1 | 100% | 75% | 10.7s | $0.0037 | – |
-| `dotenv@16.4.7` lib/main.js | 6/7 | 17/23 | 9/17 | 16/17 passing | 3 | 84.21% | 77.46% | 33.4s | $0.04 | fs, os, crypto |
+| `ms@2.1.3` index.js | 1/1 | 6/6 | 4/6 | 6/6 passing | 1 | 88.88% | 50.81% | 18.0s | $0.0056 | – |
+| `bytes@3.1.2` index.js | 3/3 | 15/15 | 12/15 | 15/15 passing | 2 | 97.64% | 90.9% | 16.5s | $0.0093 | – |
+| `escape-html@1.0.3` index.js | 1/1 | 5/5 | 5/5 | 5/5 passing | 0 | 100% | 100% | 6.1s | $0.0026 | – |
+| `content-type@1.0.5` index.js | 2/2 | 9/10 | 9/9 | 9/9 passing | 0 | 96.44% | 88.88% | 7.3s | $0.0053 | – |
+| `cookie@0.7.2` index.js | 2/2 | 10/10 | 10/10 | 10/10 passing | 0 | 92.83% | 78.57% | 7.9s | $0.0056 | – |
+| `camelcase@8.0.0` index.js | 1/1 | 6/6 | 5/6 | 6/6 passing | 1 | 98.18% | 91.48% | 29.9s | $0.0053 | – |
+| `slugify@1.6.6` slugify.js | 1/1 | 5/5 | 4/5 | 5/5 passing | 2 | 86.95% | 92% | 13.9s | $0.01 | – |
+| `semver@7.6.3` functions/inc.js | 1/1 | 5/6 | 4/5 | 5/5 passing | 1 | 100% | 75% | 10.8s | $0.0037 | – |
+| `dotenv@16.4.7` lib/main.js | 3/7 | 12/25 | 11/12 | 12/12 passing | 1 | 36.56% | 82.35% | 22.2s | $0.02 | fs, os, crypto |
 
 | Metric | Result |
 | --- | --- |
-| Test generation (files with valid tests) | 8/9 (88.9%) |
-| Test generation (cases passing validation) | 77/84 (91.7%) |
-| Execution (files whose tests ran) | 8/9 (88.9%) |
-| Execution (tests passing on first run) | 65/77 (84.4%) |
-| Repair (initially failing tests fixed) | 11/12 (91.7%) |
-| Repair (flagged as source bugs / set aside) | 0 / 1 |
-| Final (tests passing) | 76/77 (98.7%) |
-| Files with every test passing (none skipped) | 7/9 |
-| Line coverage, before → after (mean) | 0% → 95% |
-| Branch coverage after (mean) | 81.3% |
-| Runtime (total / median per file) | 93.9s / 7.7s |
-| Model cost (total / mean per file) | $0.07 / $0.0076 |
+| Test generation (files with valid tests) | 9/9 (100%) |
+| Test generation (cases passing validation) | 73/88 (83%) |
+| Execution (files whose tests ran) | 9/9 (100%) |
+| Execution (tests passing on first run) | 64/73 (87.7%) |
+| Repair (initially failing tests fixed) | 9/9 (100%) |
+| Repair (flagged as source bugs / set aside) | 0 / 0 |
+| Final (tests passing) | 73/73 (100%) |
+| Files with every test passing (none skipped) | 9/9 |
+| Line coverage, before → after (mean) | 0% → 88.6% |
+| Branch coverage after (mean) | 83.3% |
+| Runtime (total / median per file) | 132.6s / 13.9s |
+| Model cost (total / mean per file) | $0.07 / $0.0080 |
+| Tokens (in / out) | 45,040 / 8,485 |
 
 How to read it:
 
 - "Coverage before" is 0% because published npm packages don't include their tests. The comparison is with having no tests, not with each project's own suite.
-- Model output varies between runs. In four full runs during development, the final pass rate ranged from 82.7% to 98.7%. The lowest came from `dotenv`, where the model tried to stub functions in the same file. The validation rules described under [Generating tests](#generating-tests) now reject that, and this run is the first with those rules. Rerun the benchmark rather than relying on one number.
+- Model output varies between runs. In six full runs during development, the final pass rate ranged from 82.7% to 100%, and mean line coverage from 88.6% to 95%. Rerun the benchmark rather than relying on one number.
 - Each target is one file, and none is large (the biggest is `dotenv/lib/main.js`, 360 lines). Nine files are enough to find failure patterns, not to estimate a precise success rate.
 
 Limitations found by the benchmark:
 
-- **UMD modules are not recognized.** `slugify` wraps its code in a UMD factory, so the analyzer finds no exports and no tests are generated.
-- **Files with much I/O need more repair.** `dotenv` reads files, decrypts with `crypto`, and writes to `process.env`. Only about half of its tests passed on the first run, and repair needed all three rounds. One test was still failing and was kept as `it.skip`.
-- **Branch coverage trails line coverage** (81% vs. 95%). The model covers typical paths well but misses rarer branches, such as the unit aliases in `ms`.
+- **Functions that call each other in the same file are hard to isolate.** In this run the model wrote 13 `dotenv` cases that spied on `parse` or `configDotenv` to test their callers. A spy can't intercept a call made inside the same file, so validation rejected all 13. Four of the seven functions ended up without tests, and line coverage for the file was 37%. The previous run, where the model tested those functions directly, reached 84%.
+- **Branch coverage trails line coverage** (83% vs. 89%). The model covers typical paths well but misses rarer branches, such as the unit aliases in `ms`.
 - Cases are sometimes rejected for syntax errors or for `require()` calls in the test body. They are dropped rather than retried, which lowers coverage for that file.
 
 ## Build and link locally
@@ -282,7 +303,7 @@ assertloom --help
 | Command | Description |
 | --- | --- |
 | `assertloom analyze <file> [--json]` | Statically analyze functions, parameters, imports, and dependencies |
-| `assertloom generate <file> [--model] [--out] [--dry-run] [--no-run] [--no-repair] [--max-attempts] [--report] [--mock] [--keep-real] [--allow-network] [--max-cost] [--force]` | Generate Jest tests for exported functions with dependencies mocked, run and repair them, and keep them if they pass |
+| `assertloom generate <file> [--provider] [--model] [--base-url] [--out] [--dry-run] [--no-run] [--no-repair] [--max-attempts] [--report] [--mock] [--keep-real] [--allow-network] [--max-cost] [--force]` | Generate Jest tests for exported functions with dependencies mocked, run and repair them, and keep them if they pass |
 | `assertloom run <testFile> [--source] [--timeout] [--allow-network] [--json]` | Run a test file with Jest and report results and coverage |
 | `assertloom help [command]` | Show help |
 

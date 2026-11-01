@@ -4,6 +4,17 @@ All notable changes to Assertloom are documented here. The format follows [Keep 
 
 ## Unreleased
 
+### Added
+
+- `--provider anthropic` (Claude models, `ANTHROPIC_API_KEY`) and `--provider openai-compatible` with `--base-url` for Ollama, LM Studio, vLLM, OpenRouter, and other servers with the OpenAI Chat Completions API. Claude prices are included in the spending limit.
+- UMD modules: exports returned by a UMD factory are analyzed and tested. `slugify` in the benchmark now gets tests.
+- The benchmark takes `--provider` and `--base-url`.
+
+### Changed
+
+- Releases are published with npm trusted publishing (OIDC) instead of a stored token.
+- Benchmark rerun with the 0.1.0 review fixes and UMD support: 73/73 kept tests pass and mean line coverage is 88.6% across 9 files.
+
 ## 0.1.0 - 2026-10-31
 
 First public release.
