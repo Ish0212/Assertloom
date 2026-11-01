@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -33,11 +33,10 @@ jobs:
       - run: npm test
       - run: npm run build
 
-      # Uses the NPM_TOKEN secret if set; otherwise npm trusted publishing (OIDC) configured on npmjs.com.
+      # Trusted publishing (OIDC, configured on npmjs.com) needs npm 11.5.1 or later; no token is stored.
+      - run: npm install -g npm@11
       - name: Publish to npm with provenance
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub release
         env:
