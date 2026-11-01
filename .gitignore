@@ -7,4 +7,5 @@ coverage/
 *.test.preview.*
 !fixtures/**/*.test.preview.*
 bench/.cache/
+.vitest-runs/
 *.tgz

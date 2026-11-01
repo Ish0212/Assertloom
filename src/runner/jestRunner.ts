@@ -8,6 +8,8 @@ import { writeNetworkGuard } from "./networkGuard.js";
 import { detectJestSetup, jestCanStartIn, type JestSetup } from "./project.js";
 import { cleanMessage, parseJestReport, type JestJsonReport } from "./results.js";
 import type { RunResult } from "./types.js";
+import type { TestFramework } from "../types/index.js";
+import { describeVitestSetup, detectVitestSetup, vitestArgs, writeVitestRunConfig } from "./vitest.js";
 
 export const DEFAULT_RUN_TIMEOUT_MS = 120_000;
 export const DEFAULT_TEST_TIMEOUT_MS = 5_000;
@@ -22,6 +24,8 @@ export interface RunOptions {
   testTimeoutMs?: number;
   /** Let tests open network connections. Off by default. */
   allowNetwork?: boolean;
+  /** Default: jest. */
+  framework?: TestFramework;
 }
 
 /** Environment for untrusted test code: drops anything that looks like a credential. */
@@ -83,13 +87,16 @@ export async function runJest(options: RunOptions): Promise<RunResult> {
   const testPath = realPath(options.testPath);
   const sourcePath = realPath(options.sourcePath);
   const timeoutMs = options.timeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
-  const setup = detectJestSetup(sourcePath);
+  const testTimeoutMs = options.testTimeoutMs ?? DEFAULT_TEST_TIMEOUT_MS;
+  const vitest = options.framework === "vitest" ? detectVitestSetup(sourcePath) : undefined;
+  const jest = vitest ? undefined : detectJestSetup(sourcePath);
   const originalSource = await readFile(sourcePath);
   const runDir = await mkdtemp(path.join(os.tmpdir(), "assertloom-run-"));
   const started = Date.now();
 
   const network = options.allowNetwork ? "network allowed" : "network blocked";
-  const base = { tests: [], passed: 0, failed: 0, skipped: 0, total: 0, setup: `${describeSetup(setup)}, ${network}` };
+  const described = vitest ? describeVitestSetup(vitest) : describeSetup(jest!);
+  const base = { tests: [], passed: 0, failed: 0, skipped: 0, total: 0, setup: `${described}, ${network}` };
   let result: RunResult | undefined;
 
   try {
@@ -107,19 +114,24 @@ export async function runJest(options: RunOptions): Promise<RunResult> {
   async function execute(): Promise<RunResult> {
     const coverageDir = path.join(runDir, "coverage");
     const resultsPath = path.join(runDir, "results.json");
-    const configPath = await writeRunConfig(setup, { testPath, sourcePath, coverageDir }, runDir);
+    const files = { testPath, sourcePath, coverageDir };
 
     const env = sanitizedEnv();
     if (!options.allowNetwork) {
       env.NODE_OPTIONS = [env.NODE_OPTIONS, await writeNetworkGuard(runDir)].filter(Boolean).join(" ");
     }
 
-    const { timedOut, output } = await runProcess(
-      process.execPath,
-      [
+    let args: string[];
+    let cwd: string;
+    if (vitest) {
+      args = vitestArgs(vitest, await writeVitestRunConfig(vitest, { ...files, resultsPath, testTimeoutMs }, runDir));
+      cwd = vitest.root;
+    } else {
+      const setup = jest!;
+      args = [
         setup.jestBin,
         "--config",
-        configPath,
+        await writeRunConfig(setup, files, runDir),
         "--runInBand",
         "--ci",
         "--no-watchman",
@@ -129,11 +141,13 @@ export async function runJest(options: RunOptions): Promise<RunResult> {
         "--coverage",
         // Open handles left by the code under test would otherwise keep Jest alive until the timeout.
         "--forceExit",
-        `--testTimeout=${options.testTimeoutMs ?? DEFAULT_TEST_TIMEOUT_MS}`,
-      ],
+        `--testTimeout=${testTimeoutMs}`,
+      ];
       // runDir holds the generated config, so Jest can always find one there.
-      { cwd: jestCanStartIn(setup.root) ? setup.root : runDir, timeoutMs, env },
-    );
+      cwd = jestCanStartIn(setup.root) ? setup.root : runDir;
+    }
+
+    const { timedOut, output } = await runProcess(process.execPath, args, { cwd, timeoutMs, env });
 
     const durationMs = Date.now() - started;
     let report: JestJsonReport;

@@ -40,14 +40,14 @@ export function cleanMessage(text: string): string {
 
 export function classifyTestFailure(message: string): TestFailureKind {
   const text = stripAnsi(message);
-  if (/Exceeded timeout of \d+ ?ms/.test(text)) return "timeout";
-  if (/expect\(.*?\)\.|Expected:|Received:|Expected value|Received value/.test(text)) return "assertion";
+  if (/Exceeded timeout of \d+ ?ms|Test timed out in \d+ ?ms/.test(text)) return "timeout";
+  if (/expect\(.*?\)\.|Expected:|Received:|Expected value|Received value|^AssertionError:/m.test(text)) return "assertion";
   return "error";
 }
 
 export function classifySuiteFailure(message: string): InfraFailure {
   const text = cleanMessage(message);
-  if (/Cannot find module/.test(text)) return { kind: "module-not-found", message: text };
+  if (/Cannot find module|Failed to (?:resolve|load) (?:import|url)|Cannot find package/.test(text)) return { kind: "module-not-found", message: text };
   if (/Jest encountered an unexpected token|SyntaxError|Must use import to load ES Module|Cannot use import statement/.test(text)) {
     return { kind: "transform", message: text };
   }

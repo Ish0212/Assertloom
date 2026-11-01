@@ -4,6 +4,8 @@ export type SupportedExtension = (typeof SUPPORTED_EXTENSIONS)[number];
 
 export type SourceLanguage = "typescript" | "javascript";
 
+export type TestFramework = "jest" | "vitest";
+
 export interface SourceFile {
   /** Path as the user typed it, normalized for display. */
   inputPath: string;
