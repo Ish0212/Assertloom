@@ -5,6 +5,9 @@ import { FileValidationError, validateSourceFile } from "../validateFile.js";
 import { runJest } from "../../runner/index.js";
 import { printRunResult } from "../report.js";
 
+/** Node timers overflow above 2^31 - 1 ms and fire immediately. */
+const MAX_TIMEOUT_SECONDS = 2_147_483;
+
 interface RunCommandOptions {
   source?: string;
   timeout: string;
@@ -40,7 +43,9 @@ export function registerRunCommand(program: Command): void {
       const source = await validateSourceFile(sourceArg);
 
       const timeoutSeconds = Number(options.timeout);
-      if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) throw new FileValidationError("--timeout must be a positive number.");
+      if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0 || timeoutSeconds > MAX_TIMEOUT_SECONDS) {
+        throw new FileValidationError(`--timeout must be a positive number of seconds, at most ${MAX_TIMEOUT_SECONDS}.`);
+      }
 
       const result = await runJest({
         testPath,

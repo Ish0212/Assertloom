@@ -43,10 +43,15 @@ emit("\r\n", 0.4);
 last = Date.now();
 
 const child = spawn(command, args, { cwd: values.cwd });
-const onData = (chunk) => emit(chunk.toString().replace(/(?<!\r)\n/g, "\r\n"));
+const onData = (chunk) => emit(chunk.replace(/(?<!\r)\n/g, "\r\n"));
+child.stdout.setEncoding("utf8");
+child.stderr.setEncoding("utf8");
 child.stdout.on("data", onData);
 child.stderr.on("data", onData);
-const code = await new Promise((resolve) => child.on("close", resolve));
+const code = await new Promise((resolve, reject) => {
+  child.on("error", reject);
+  child.on("close", resolve);
+});
 emit("\u001b[32m$\u001b[0m ", 0.5);
 emit("", 2.5);
 

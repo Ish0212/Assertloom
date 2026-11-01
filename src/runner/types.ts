@@ -35,4 +35,6 @@ export interface RunResult {
   durationMs: number;
   /** Where the Jest binary and configuration came from. */
   setup: string;
+  /** The run changed the source file under test; it has been restored. */
+  sourceRestored?: boolean;
 }

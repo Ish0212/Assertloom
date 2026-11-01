@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -143,9 +143,14 @@ describe("config helpers", () => {
     const regex = new RegExp(testRegexFor("/repo/src/math.test.preview.ts"));
 
     expect(regex.test("/repo/src/math.test.preview.ts")).toBe(true);
-    expect(regex.test("C:\\repo\\src\\math.test.preview.ts")).toBe(true);
     expect(regex.test("/repo/src/math.test.preview.tsx")).toBe(false);
     expect(regex.test("/repo/src/xmath.test.preview.ts")).toBe(false);
+    expect(regex.test("/repo/src/sub/math.test.preview.ts")).toBe(false);
+    expect(regex.test("/other/repo/src/math.test.preview.ts")).toBe(false);
+
+    const windows = new RegExp(testRegexFor("C:\\repo\\src\\math.test.ts"));
+    expect(windows.test("C:\\repo\\src\\math.test.ts")).toBe(true);
+    expect(windows.test("C:/repo/src/math.test.ts")).toBe(true);
   });
 
   it("measures coverage only for the source file", () => {
@@ -270,6 +275,35 @@ describe.concurrent("runJest (real Jest runs)", { timeout: 180_000 }, () => {
       expect(result.infra).toBeUndefined();
       expect(result).toMatchObject({ status: "passed", passed: 3, failed: 0 });
       expect(result.coverage).toEqual({ lines: 100, statements: 100, functions: 100, branches: 100 });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("runs only this test file, despite project roots, ignores, leaked timers, and restores a modified source", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "assertloom-isolation-"));
+    try {
+      await writeFile(
+        path.join(dir, "package.json"),
+        JSON.stringify({ name: "isolation", jest: { roots: ["<rootDir>/tests"], testPathIgnorePatterns: ["/node_modules/", "/src/"] } }),
+      );
+      await mkdir(path.join(dir, "tests"));
+      await mkdir(path.join(dir, "src", "sub"), { recursive: true });
+      const sourcePath = path.join(dir, "src", "a.cjs");
+      const source = "exports.start = () => {\n  setInterval(() => {}, 1000);\n  return 1;\n};\n";
+      await writeFile(sourcePath, source);
+      await writeFile(
+        path.join(dir, "src", "a.test.cjs"),
+        'const fs = require("fs");\nconst { start } = require("./a.cjs");\nit("starts", () => {\n  fs.appendFileSync(require.resolve("./a.cjs"), "// tampered\\n");\n  expect(start()).toBe(1);\n});\n',
+      );
+      await writeFile(path.join(dir, "src", "sub", "a.test.cjs"), 'it("is unrelated", () => {\n  expect(1).toBe(2);\n});\n');
+
+      const result = await runJest({ testPath: path.join(dir, "src", "a.test.cjs"), sourcePath, timeoutMs: 60_000 });
+
+      expect(result.infra).toBeUndefined();
+      expect(result).toMatchObject({ status: "passed", passed: 1, total: 1, sourceRestored: true });
+      expect(result.durationMs).toBeLessThan(30_000);
+      expect(await readFile(sourcePath, "utf8")).toBe(source);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { readCoverage, realPath } from "./coverage.js";
@@ -54,9 +54,11 @@ function runProcess(
     let output = "";
     let timedOut = false;
 
-    const append = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-OUTPUT_TAIL_CHARS);
+    const append = (chunk: string) => {
+      output = (output + chunk).slice(-OUTPUT_TAIL_CHARS);
     };
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
     child.stdout.on("data", append);
     child.stderr.on("data", append);
 
@@ -82,13 +84,27 @@ export async function runJest(options: RunOptions): Promise<RunResult> {
   const sourcePath = realPath(options.sourcePath);
   const timeoutMs = options.timeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
   const setup = detectJestSetup(sourcePath);
+  const originalSource = await readFile(sourcePath);
   const runDir = await mkdtemp(path.join(os.tmpdir(), "assertloom-run-"));
   const started = Date.now();
 
   const network = options.allowNetwork ? "network allowed" : "network blocked";
   const base = { tests: [], passed: 0, failed: 0, skipped: 0, total: 0, setup: `${describeSetup(setup)}, ${network}` };
+  let result: RunResult | undefined;
 
   try {
+    result = await execute();
+    return result;
+  } finally {
+    await rm(runDir, { recursive: true, force: true });
+    const current = await readFile(sourcePath).catch(() => undefined);
+    if (!current?.equals(originalSource)) {
+      await writeFile(sourcePath, originalSource);
+      if (result) result.sourceRestored = true;
+    }
+  }
+
+  async function execute(): Promise<RunResult> {
     const coverageDir = path.join(runDir, "coverage");
     const resultsPath = path.join(runDir, "results.json");
     const configPath = await writeRunConfig(setup, { testPath, sourcePath, coverageDir }, runDir);
@@ -111,6 +127,8 @@ export async function runJest(options: RunOptions): Promise<RunResult> {
         "--outputFile",
         resultsPath,
         "--coverage",
+        // Open handles left by the code under test would otherwise keep Jest alive until the timeout.
+        "--forceExit",
         `--testTimeout=${options.testTimeoutMs ?? DEFAULT_TEST_TIMEOUT_MS}`,
       ],
       // runDir holds the generated config, so Jest can always find one there.
@@ -118,14 +136,13 @@ export async function runJest(options: RunOptions): Promise<RunResult> {
     );
 
     const durationMs = Date.now() - started;
-    if (timedOut) {
-      return { ...base, status: "error", durationMs, infra: { kind: "timeout", message: `Jest did not finish within ${timeoutMs / 1000}s.` } };
-    }
-
     let report: JestJsonReport;
     try {
       report = JSON.parse(await readFile(resultsPath, "utf8")) as JestJsonReport;
     } catch {
+      if (timedOut) {
+        return { ...base, status: "error", durationMs, infra: { kind: "timeout", message: `Jest did not finish within ${timeoutMs / 1000}s.` } };
+      }
       return { ...base, status: "error", durationMs, infra: { kind: "crash", message: cleanMessage(output) || "Jest exited without writing results." } };
     }
 
@@ -150,7 +167,5 @@ export async function runJest(options: RunOptions): Promise<RunResult> {
       coverage: infra ? undefined : await readCoverage(path.join(coverageDir, "coverage-summary.json"), sourcePath),
       durationMs,
     };
-  } finally {
-    await rm(runDir, { recursive: true, force: true });
   }
 }

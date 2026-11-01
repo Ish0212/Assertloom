@@ -185,7 +185,7 @@ Limits:
 - At most 3 rounds (`--max-attempts 0` to `3`; `--no-repair` turns repair off). The loop also stops when everything passes, when the model proposes no usable fix, or before a round that could exceed `--max-cost`.
 - A round that makes a previously passing test fail is undone, and the loop stops.
 - Tests still failing at the end are kept as `it.skip` with the reason, so the file runs cleanly and the problems stay visible.
-- Repair only writes the generated test file. Assertloom hashes the source file before and after, and restores it if a test changed it.
+- Repair only writes the generated test file. Every Jest run snapshots the source file first and restores it afterwards if a test changed it.
 
 Use `--report <file>` to save JSON with the results of the first run, every repair round (requested changes, rejected proposals, before/after counts, token usage), and the final run.
 

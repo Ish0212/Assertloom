@@ -112,6 +112,7 @@ async function benchmark(target: Target, model: string | undefined, maxCost: num
     const firstRun = await runJest({ testPath: generation.testPath, sourcePath: source.absolutePath });
     result.durationMs.firstRun = lap(t);
     result.initial = withInfra(firstRun);
+    result.final = result.initial;
 
     let finalRun = firstRun;
     let content = generation.content;
@@ -164,7 +165,7 @@ const median = (values: number[]) => {
 };
 
 function aggregate(results: TargetResult[]) {
-  const ran = results.filter((r) => r.initial && !r.initial.infra);
+  const ran = results.filter((r) => r.initial && !r.initial.infra && r.final);
   const total = (s?: RunSummary) => (s ? s.passed + s.failed + s.skipped : 0);
   const initialFailed = sum(ran.map((r) => r.initial!.failed));
   const repaired = sum(ran.map((r) => Math.max(0, r.final!.passed - r.initial!.passed)));

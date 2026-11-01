@@ -28,19 +28,23 @@ net.Socket.prototype.connect = function (...args) {
   return this;
 };
 
-// Local servers resolve their own host before listening; connections are still blocked above.
+// Local servers look up their own host before listening, which needs no DNS server; connections are still blocked above.
 const local = (host) => typeof host === "string" && (net.isIP(host) !== 0 || host === "localhost");
-const guard = (original) =>
+const guard = (original, allowLocal) =>
   function (...args) {
-    if (local(args[0])) return original.apply(this, args);
+    if (allowLocal && local(args[0])) return original.apply(this, args);
     const error = blocked(String(args[0]));
     const callback = args[args.length - 1];
     if (typeof callback === "function") return void process.nextTick(callback, error);
     return Promise.reject(error);
   };
-for (const name of ["lookup", "lookupService", "resolve", "resolve4", "resolve6", "resolveAny", "resolveCname", "resolveMx", "resolveNs", "resolveSrv", "resolveTxt", "reverse"]) {
-  if (typeof dns[name] === "function") dns[name] = guard(dns[name]);
-  if (typeof dns.promises[name] === "function") dns.promises[name] = guard(dns.promises[name]);
+const QUERIES = ["lookupService", "resolve", "resolve4", "resolve6", "resolveAny", "resolveCaa", "resolveCname", "resolveMx", "resolveNaptr", "resolveNs", "resolvePtr", "resolveSoa", "resolveSrv", "resolveTlsa", "resolveTxt", "reverse"];
+for (const target of [dns, dns.promises]) {
+  target.lookup = guard(target.lookup, true);
+  for (const owner of [target, target.Resolver && target.Resolver.prototype]) {
+    if (!owner) continue;
+    for (const name of QUERIES) if (typeof owner[name] === "function") owner[name] = guard(owner[name], false);
+  }
 }
 `;
 

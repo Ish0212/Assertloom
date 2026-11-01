@@ -98,6 +98,14 @@ test("dns", async () => {
   });
 });
 
+test("dns resolver", async () => {
+  for (const query of [() => new dns.promises.Resolver().resolve4("example.com"), () => dns.promises.reverse("8.8.8.8")]) {
+    await query().catch((error) => {
+      if (error.code === "ASSERTLOOM_NETWORK_BLOCKED") throw error;
+    });
+  }
+});
+
 test("child process", async () => {
   const script = "fetch(" + JSON.stringify(url) + ").then(() => process.exit(0), () => process.exit(3))";
   await new Promise((resolve, reject) => execFile(process.execPath, ["-e", script], (error) => (error ? reject(new Error("child exited with " + error.code)) : resolve())));
@@ -115,8 +123,8 @@ test("child process", async () => {
 
     expect(run.setup).toContain("network blocked");
     expect(run.infra).toBeUndefined();
-    expect(run).toMatchObject({ status: "failed", passed: 0, failed: 4 });
-    for (const name of ["fetch", "http", "dns"]) {
+    expect(run).toMatchObject({ status: "failed", passed: 0, failed: 5 });
+    for (const name of ["fetch", "http", "dns", "dns resolver"]) {
       const test = run.tests.find((t) => t.name === name);
       expect(test?.failure?.message).toContain(NETWORK_BLOCKED_MESSAGE);
       expect(classifyTestFailure(test!)).toEqual({ category: "mock", repairable: false });
@@ -129,6 +137,6 @@ test("child process", async () => {
 
     expect(run.setup).toContain("network allowed");
     expect(run.infra).toBeUndefined();
-    expect(run).toMatchObject({ status: "passed", passed: 4 });
+    expect(run).toMatchObject({ status: "passed", passed: 5 });
   });
 });

@@ -24,3 +24,11 @@ First public release.
 
 - Jest runs on files outside any npm project. Jest 30 also resolves a config from its working directory and failed when none existed.
 - Coverage is found when the source path goes through a symlink or a Windows short name (macOS temp directories, CI runners).
+- Only the generated test file runs: other test files with the same name, project `roots`, and `testPathIgnorePatterns` no longer change which tests run.
+- Timers or sockets left open by the code under test no longer turn a finished run into a timeout (`--forceExit`).
+- Every Jest run, not just repair rounds, restores the source file if a test changed it.
+- Test-body validation catches indirect access to `require`, `process`, `eval`, and forbidden `jest` methods, optional calls, and bodies that escape their test function.
+- Exports named with reserved words or non-identifier keys get safe import names.
+- Secret redaction covers Stripe keys, Bearer tokens, quoted keys, and comparisons.
+- The network guard also blocks `dns.Resolver` queries and reverse lookups.
+- Re-exports are followed when deciding whether a local module needs mocking; multi-line template literals in test bodies keep their exact text.

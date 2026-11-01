@@ -16,9 +16,9 @@ function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Matches exactly this test file, whatever its name, on any OS path separator. */
+/** Matches exactly this test file by its full path, on any OS path separator. */
 export function testRegexFor(testPath: string): string {
-  return `[\\\\/]${escapeRegex(path.basename(testPath))}$`;
+  return `^${testPath.split(/[\\/]/).map(escapeRegex).join("[\\\\/]")}$`;
 }
 
 function coverageGlob(rootDir: string, sourcePath: string): string {
@@ -61,6 +61,17 @@ function wrapperModule(baseConfigExpression: string, baseDir: string, files: Run
 
 const baseDir = ${JSON.stringify(baseDir)};
 const sourcePath = ${JSON.stringify(files.sourcePath)};
+const testPath = ${JSON.stringify(files.testPath)};
+
+const ignores = (pattern, rootDir) => {
+  try {
+    // Jest rewrites "/" in these patterns to the OS separator, so check both spellings of the path.
+    const regex = new RegExp(pattern.replaceAll("<rootDir>", rootDir));
+    return regex.test(testPath) || regex.test(testPath.split(path.sep).join("/"));
+  } catch {
+    return false;
+  }
+};
 
 export default async () => {
   let config = ${baseConfigExpression};
@@ -69,6 +80,10 @@ export default async () => {
   if (config.projects) throw new Error("Assertloom: Jest \`projects\` configurations are not supported yet.");
   delete config.testMatch;
   const rootDir = config.rootDir ? path.resolve(baseDir, config.rootDir) : baseDir;
+  if (Array.isArray(config.roots)) config.roots = [...config.roots, path.dirname(testPath)];
+  if (Array.isArray(config.testPathIgnorePatterns)) {
+    config.testPathIgnorePatterns = config.testPathIgnorePatterns.filter((p) => !ignores(p, rootDir));
+  }
   return {
     ...config,
     rootDir,

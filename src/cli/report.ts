@@ -19,6 +19,7 @@ function firstLines(text: string, count: number): string {
 
 export function printRunResult(result: RunResult): void {
   const seconds = (result.durationMs / 1000).toFixed(1);
+  if (result.sourceRestored) console.log("! The tests modified the source file under test; Assertloom restored the original.");
 
   if (result.infra) {
     console.log(`✗ Jest could not run the tests (${result.infra.kind}, ${result.setup}, ${seconds}s)`);
