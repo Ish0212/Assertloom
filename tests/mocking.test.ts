@@ -121,6 +121,22 @@ describe("planMocks", () => {
     ]);
   });
 
+  it("follows re-exports when deciding whether a local module is pure", async () => {
+    await writeFile(path.join(dir, "barrel.ts"), 'export * from "./client";\nexport type { Thing } from "./types";\n');
+    const result = await plan('import { get } from "./barrel";\nexport const run = () => get("/x");\n');
+
+    expect(result.mocked.map((m) => [m.source, m.reason])).toEqual([["./barrel", "depends on ./client (depends on axios)"]]);
+  });
+
+  it("mocks an instanceof target that also has members as a class", async () => {
+    const result = await plan(
+      'import { ZodError } from "zod";\nexport const run = (e: unknown) => e instanceof ZodError && ZodError.create([]);\n',
+      { mock: ["zod"] },
+    );
+
+    expect(result.imports[0]).toContain("ZodError: Object.assign(class {}, { create: jest.fn() })");
+  });
+
   it("lets --mock and --keep-real override the defaults", async () => {
     const result = await plan('import { z } from "zod";\nimport fs from "node:fs";\nexport const run = () => [z.string(), fs.statSync("x")];\n', {
       mock: ["zod"],

@@ -269,7 +269,7 @@ export function extractFunctions(ast: File, code: string, scan: ImportScan): Fun
         kind: node.type === "ArrowFunctionExpression" ? "arrow" : node.type === "FunctionDeclaration" ? "declaration" : "expression",
         async: node.async,
         generator: !!node.generator,
-        parameters: node.params.map((p) => parameterInfo(code, p)),
+        parameters: node.params.filter((p) => !(p.type === "Identifier" && p.name === "this")).map((p) => parameterInfo(code, p)),
         returnType: typeText(code, node.returnType),
         typeParameters: slice(code, node.typeParameters),
         throws,

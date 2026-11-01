@@ -41,14 +41,29 @@ export interface ValidationResult {
   rejected: RejectedCase[];
 }
 
+/** Read-only process properties tests may inspect. */
+const SAFE_PROCESS_PROPERTIES = new Set(["env", "platform", "arch", "version", "versions", "argv", "pid", "execPath", "release", "features"]);
+
+const GLOBAL_OBJECTS = new Set(["globalThis", "global", "window", "self"]);
+
 function rootIdentifier(node: Node): string | undefined {
   if (node.type === "Identifier") return node.name;
-  if (node.type === "MemberExpression") return rootIdentifier(node.object);
-  if (node.type === "CallExpression") return rootIdentifier(node.callee);
+  if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") return rootIdentifier(node.object);
+  if (node.type === "CallExpression" || node.type === "OptionalCallExpression") return rootIdentifier(node.callee);
   return undefined;
 }
 
-const propertyIs = (node: { property: Node }, name: string) => node.property.type === "Identifier" && node.property.name === name;
+const isMember = (node: Node | null | undefined): node is Node & { object: Node; property: Node; computed: boolean } =>
+  node?.type === "MemberExpression" || node?.type === "OptionalMemberExpression";
+
+/** The property name of `a.b` or `a["b"]`, or undefined when it is computed at runtime. */
+function memberName(node: { property: Node; computed: boolean }): string | undefined {
+  if (!node.computed && node.property.type === "Identifier") return node.property.name;
+  if (node.property.type === "StringLiteral") return node.property.value;
+  return undefined;
+}
+
+const propertyIs = (node: { property: Node; computed: boolean }, name: string) => memberName(node) === name;
 
 /** Returns why a test body is unacceptable, or whether it needs an async callback. */
 export function checkBody(
@@ -69,42 +84,37 @@ export function checkBody(
     return { error: `syntax error: ${(error as Error).message.replace(/\s*\(\d+:\d+\)$/, "")}` };
   }
 
+  const [wrapper, ...extra] = ast.program.body;
+  if (extra.length || wrapper?.type !== "FunctionDeclaration") return { error: "has unbalanced braces" };
+
   let hasExpect = false;
   let usesAwait = false;
   let problem: string | undefined;
 
   traverse(ast, {
-    CallExpression(path) {
-      const callee = path.node.callee;
+    "CallExpression|OptionalCallExpression"(path) {
+      const node = path.node as Node & { callee: Node; arguments: Node[] };
+      const callee = node.callee;
       if (rootIdentifier(callee) === "expect") hasExpect = true;
-      if (callee.type === "Identifier" && callee.name === "require") {
-        const [arg] = path.node.arguments;
-        problem = arg?.type === "StringLiteral" ? `uses require("${arg.value}")` : "uses require()";
-      }
-      if (rootIdentifier(callee) === "jest" || rootIdentifier(callee) === "vi") {
-        const member = callee.type === "MemberExpression" && callee.property.type === "Identifier" ? callee.property.name : "";
-        if (FORBIDDEN_JEST_METHODS.has(member)) problem = `calls jest.${member}()`;
-      }
-      if (callee.type === "MemberExpression" && callee.property.type === "Identifier" && callee.property.name.startsWith("mock")) {
+      const method = isMember(callee) ? memberName(callee) : undefined;
+      if (isMember(callee) && method?.startsWith("mock")) {
         let stubbed = callee.object;
-        if (stubbed.type === "CallExpression" && rootIdentifier(stubbed.callee) === "jest") stubbed = stubbed.arguments[0] as typeof stubbed;
+        if ((stubbed.type === "CallExpression" || stubbed.type === "OptionalCallExpression") && rootIdentifier(stubbed.callee) === "jest") {
+          stubbed = stubbed.arguments[0] as typeof stubbed;
+        }
         if (stubbed?.type === "Identifier" && targets.has(stubbed.name)) {
-          problem = `calls ${callee.property.name}() on \`${stubbed.name}\`, a real function under test (only dependencies are mocked)`;
+          problem ??= `calls ${method}() on \`${stubbed.name}\`, a real function under test (only dependencies are mocked)`;
         }
       }
-      if (rootIdentifier(callee) === "jest" && callee.type === "MemberExpression" && propertyIs(callee, "spyOn")) {
-        const [, method] = path.node.arguments;
-        if (method?.type === "StringLiteral" && targets.has(method.value)) {
-          problem = `spies on \`${method.value}\`, a function under test; calls inside the source file bypass spies`;
+      if (rootIdentifier(callee) === "jest" && isMember(callee) && propertyIs(callee, "spyOn")) {
+        const [, spied] = node.arguments;
+        if (spied?.type === "StringLiteral" && targets.has(spied.value)) {
+          problem ??= `spies on \`${spied.value}\`, a function under test; calls inside the source file bypass spies`;
         }
-      }
-      if (callee.type === "MemberExpression" && rootIdentifier(callee) === "process") {
-        const member = callee.property.type === "Identifier" ? callee.property.name : "";
-        if (!SAFE_PROCESS_METHODS.has(member)) problem = `calls process.${member || "[…]"}()`;
       }
     },
     ImportExpression() {
-      problem = "uses import()";
+      problem ??= "uses import()";
     },
     AwaitExpression(path) {
       if (path.getFunctionParent()?.parentPath?.isProgram()) usesAwait = true;
@@ -114,11 +124,35 @@ export function checkBody(
     },
     Identifier(path) {
       const { name } = path.node;
+      const global = path.isReferencedIdentifier() && !path.scope.getBinding(name);
+      const parent = path.parent;
+      const member = isMember(parent) && parent.object === path.node ? memberName(parent) : null;
+      const called = isMember(parent) && (path.parentPath.parent as { callee?: Node }).callee === parent;
+
+      if (global && name === "require") {
+        const call = path.parent as { callee?: Node; arguments?: Node[] };
+        const arg = call.callee === path.node ? call.arguments?.[0] : undefined;
+        problem ??= arg?.type === "StringLiteral" ? `uses require("${arg.value}")` : "uses require";
+      }
+      if (global && (name === "eval" || name === "Function")) problem ??= `uses ${name}`;
+      if (global && name === "process") {
+        if (member === null) problem ??= "uses process directly";
+        else if (!SAFE_PROCESS_PROPERTIES.has(member ?? "") && !SAFE_PROCESS_METHODS.has(member ?? "")) {
+          problem ??= called ? `calls process.${member ?? "[…]"}()` : `uses process.${member ?? "[…]"}`;
+        }
+      }
+      if (global && (name === "jest" || name === "vi")) {
+        if (member === null) problem ??= `uses ${name} directly`;
+        else if (member === undefined || FORBIDDEN_JEST_METHODS.has(member)) problem ??= `calls jest.${member ?? "[…]"}()`;
+      }
+      if (global && GLOBAL_OBJECTS.has(name) && (member === null || member === undefined || member === "process" || member === "require")) {
+        problem ??= `uses ${name}${member ? `.${member}` : ""}`;
+      }
       if ((name === "exports" || (name === "module" && path.parentPath.isMemberExpression({ object: path.node }))) && path.isReferencedIdentifier() && !path.scope.hasBinding(name)) {
-        problem = `uses ${name === "module" ? "module.exports" : "exports"}, which is the test file's own module`;
+        problem ??= `uses ${name === "module" ? "module.exports" : "exports"}, which is the test file's own module`;
       }
       if ((path.node.name === "describe" || path.node.name === "it" || path.node.name === "test") && path.parentPath.isCallExpression({ callee: path.node })) {
-        problem = `wraps the body in ${path.node.name}()`;
+        problem ??= `wraps the body in ${path.node.name}()`;
       }
     },
   });

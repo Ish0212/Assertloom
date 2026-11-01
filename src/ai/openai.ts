@@ -17,7 +17,8 @@ export class OpenAIProvider implements LLMProvider {
         "OPENAI_API_KEY is not set. Create a key at https://platform.openai.com/api-keys and set it as an environment variable.",
       );
     }
-    this.client = new OpenAI({ apiKey, timeout: 120_000, maxRetries: 2 });
+    // Retries would bill a request the spending limit only approved once.
+    this.client = new OpenAI({ apiKey, timeout: 120_000, maxRetries: 0 });
   }
 
   async generateStructured<T>(request: StructuredRequest<T>): Promise<StructuredResponse<T>> {
@@ -47,8 +48,13 @@ export class OpenAIProvider implements LLMProvider {
       throw new ProviderError("OpenAI returned no structured output (the model may have refused the request).");
     }
 
+    const parsed = request.schema.safeParse(response.output_parsed);
+    if (!parsed.success) {
+      throw new ProviderError(`OpenAI returned output that does not match the ${request.schemaName} schema: ${parsed.error.message}`);
+    }
+
     return {
-      data: request.schema.parse(response.output_parsed),
+      data: parsed.data,
       model: response.model,
       usage: {
         inputTokens: response.usage?.input_tokens ?? 0,

@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { parseSource } from "../analyzer/parser.js";
+import { parse } from "@babel/parser";
+import traverse from "@babel/traverse";
+import { parseSource, pluginsFor } from "../analyzer/parser.js";
 import { UserError } from "../errors.js";
 import type { SupportedExtension } from "../types/index.js";
 import { unifiedDiff } from "./diff.js";
@@ -22,11 +24,36 @@ export function testPathFor(sourcePath: string): string {
   return path.join(path.dirname(sourcePath), `${path.basename(sourcePath, ext)}.test${ext}`);
 }
 
-function indent(text: string, spaces: number): string {
+/** Offsets inside template literals, where added indentation would change the string's value. */
+function templateRanges(body: string, extension: SupportedExtension): Array<[number, number]> {
+  const prefix = "async function __assertloomCase() {\n";
+  const ranges: Array<[number, number]> = [];
+  try {
+    const ast = parse(`${prefix}${body}\n}`, { sourceType: "module", plugins: pluginsFor(extension) });
+    traverse(ast, {
+      TemplateLiteral({ node }) {
+        if (node.start != null && node.end != null) ranges.push([node.start - prefix.length, node.end - prefix.length]);
+      },
+    });
+  } catch {
+    // Unparseable bodies are rejected later by parseSource; indent them naively.
+  }
+  return ranges;
+}
+
+function indent(text: string, spaces: number, extension: SupportedExtension): string {
   const pad = " ".repeat(spaces);
+  const ranges = templateRanges(text, extension);
+  let offset = 0;
   return text
-    .split(/\r?\n/)
-    .map((line) => (line.trim() ? pad + line : ""))
+    .split("\n")
+    .map((line) => {
+      const start = offset;
+      offset += line.length + 1;
+      if (ranges.some(([from, to]) => start > from && start < to)) return line;
+      const trimmed = line.replace(/\r$/, "");
+      return trimmed.trim() ? pad + trimmed : "";
+    })
     .join("\n");
 }
 
@@ -41,7 +68,7 @@ export function renderTestFile(options: {
     const tests = cases.map((c) => {
       const comment = c.skipReason ? `  // Assertloom skipped this test: ${c.skipReason.replace(/\s+/g, " ")}\n` : "";
       const it = c.skipReason ? "it.skip" : "it";
-      return `${comment}  ${it}(${JSON.stringify(c.name)}, ${c.async ? "async " : ""}() => {\n${indent(c.body, 4)}\n  });`;
+      return `${comment}  ${it}(${JSON.stringify(c.name)}, ${c.async ? "async " : ""}() => {\n${indent(c.body, 4, options.extension)}\n  });`;
     });
     return `describe(${JSON.stringify(binding.binding)}, () => {\n${tests.join("\n\n")}\n});`;
   });

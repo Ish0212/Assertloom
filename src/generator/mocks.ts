@@ -113,7 +113,7 @@ async function localImpurity(file: string, visited: Set<string>, depth: number):
   if (globals.length) return `global ${globals[0]}`;
 
   for (const entry of scanImports(ast).imports) {
-    if (entry.typeOnly || entry.kind === "re-export") continue;
+    if (entry.typeOnly) continue;
     const decision = await decide(entry.source, entry.category, entry.packageName, file, visited, depth + 1);
     if (decision.mock) return entry.category === "local" ? `${entry.source} (${decision.reason})` : entry.source;
   }
@@ -205,10 +205,8 @@ class FactoryWriter {
       this.locals.push(`const ${name} = ${this.object(shape.result!)};`);
       return withMembers(`function () { return ${name}; }`);
     }
-    if (shape.called || shape.constructed || members.length === 0) {
-      if (shape.instanceOf && !shape.called && !shape.constructed) return withMembers("class {}");
-      return withMembers("jest.fn()");
-    }
+    if (shape.instanceOf && !shape.called && !shape.constructed) return withMembers("class {}");
+    if (shape.called || shape.constructed || members.length === 0) return withMembers("jest.fn()");
     return `{ ${members.join(", ")} }`;
   }
 

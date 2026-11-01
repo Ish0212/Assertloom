@@ -5,13 +5,13 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildGenerationPrompt, GENERATION_SYSTEM_PROMPT } from "../src/ai/prompts.js";
 import { redactSecrets } from "../src/ai/redact.js";
-import { analyzeFile, parseSource } from "../src/analyzer/index.js";
+import { analyzeFile, analyzeSource, parseSource } from "../src/analyzer/index.js";
 import { validateSourceFile } from "../src/cli/validateFile.js";
 import { generateTests, GenerationError, TestFileExistsError, unifiedDiff, writeTestFile } from "../src/generator/index.js";
 import type { FileAnalysis } from "../src/types/index.js";
 import { importSpecifier, planImports } from "../src/generator/importPlan.js";
 import { GenerationSchema, type Generation } from "../src/generator/schema.js";
-import { GENERATED_HEADER, previewPathFor } from "../src/generator/testWriter.js";
+import { GENERATED_HEADER, previewPathFor, renderTestFile } from "../src/generator/testWriter.js";
 import { checkBody, MAX_CASES_PER_FUNCTION, validateGeneration } from "../src/generator/validate.js";
 import { FakeProvider } from "./helpers/fakeProvider.js";
 
@@ -80,6 +80,22 @@ describe("planImports", () => {
     ]);
   });
 
+  it("renames exports that are reserved words or not identifiers", () => {
+    const plan = (code: string, extension: ".js" | ".cjs", file: string) => {
+      const analysis = analyzeSource(code, { inputPath: file, extension, language: "javascript" });
+      const result = planImports(analysis, exported(analysis), path.join(root, file), path.join(root, `x.test${extension}`));
+      for (const statement of result.statements) parseSource(statement, extension);
+      return result.statements;
+    };
+
+    expect(plan("exports.delete = function (id) { return id; };", ".cjs", "m.cjs")).toEqual(['const { delete: _delete } = require("./m.cjs");']);
+    expect(plan("module.exports = { 'get-user': function (id) { return id; } };", ".cjs", "m.cjs")).toEqual([
+      'const { "get-user": getUser } = require("./m.cjs");',
+    ]);
+    expect(plan("function del(id) { return id; }\nexport { del as delete };", ".js", "m.js")).toEqual(['import { delete as _delete } from "./m";']);
+    expect(plan("export default function (x) { return x; }", ".js", "new.js")).toEqual(['import _new from "./new";']);
+  });
+
   it("builds relative specifiers across directories", () => {
     expect(importSpecifier(path.join(root, "tests", "math.test.ts"), path.join(root, "examples", "math.ts"))).toBe("../examples/math");
   });
@@ -110,6 +126,8 @@ describe("checkBody", () => {
     expect(checkBody("expect(() => add('1' as any, 2)).not.toThrow();", ".ts")).toEqual({ async: false });
     expect(checkBody("expect(resolve(process.cwd())).toBe(process.cwd());", ".js")).toEqual({ async: false });
     expect(checkBody("const result = load({ exports: 1 });\nexpect(result.exports).toBe(1);", ".js")).toEqual({ async: false });
+    expect(checkBody("process.env.TZ = 'UTC'; expect(process.platform).toBeDefined();", ".js")).toEqual({ async: false });
+    expect(checkBody("global.fetch = jest.fn(); expect(fetchRate()).toBeDefined();", ".js")).toEqual({ async: false });
   });
 
   it.each([
@@ -123,6 +141,18 @@ describe("checkBody", () => {
     ["jest.spyOn(module.exports, 'parse'); expect(1).toBe(1);", "uses module.exports, which is the test file's own module"],
     ["exports.x = 1; expect(1).toBe(1);", "uses exports, which is the test file's own module"],
     ["it('nested', () => { expect(1).toBe(1); });", "wraps the body in it()"],
+    ["globalThis.process.exit(1); expect(1).toBe(1);", "uses globalThis.process"],
+    ["process?.exit(1); expect(1).toBe(1);", "calls process.exit()"],
+    ["process.exit.call(process, 1); expect(1).toBe(1);", "uses process.exit"],
+    ["const p = process; p.exit(1); expect(1).toBe(1);", "uses process directly"],
+    ["require?.('child_process'); expect(1).toBe(1);", 'uses require("child_process")'],
+    ["require.call(null, 'fs'); expect(1).toBe(1);", "uses require"],
+    ["(0, require)('fs'); expect(1).toBe(1);", "uses require"],
+    ["jest['requireActual']('fs'); expect(1).toBe(1);", "calls jest.requireActual()"],
+    ["jest?.mock('fs'); expect(1).toBe(1);", "calls jest.mock()"],
+    ["const j = jest; j.mock('fs'); expect(1).toBe(1);", "uses jest directly"],
+    ["new Function('return process')(); expect(1).toBe(1);", "uses Function"],
+    ["expect(1).toBe(1); } {", "has unbalanced braces"],
   ])("rejects %s", (body, reason) => {
     expect(checkBody(body, ".ts")).toEqual({ error: reason });
   });
@@ -196,6 +226,20 @@ describe("redactSecrets", () => {
     expect(redacted).not.toMatch(/sk-proj|hunter2|s3cret|AKIA/);
     expect(redacted).toContain("hello world, not a secret");
     expect(redacted).toContain("const tokenCount = 5;");
+  });
+
+  it("catches Stripe keys, Bearer tokens, quoted keys and comparisons", () => {
+    const code = [
+      `new Stripe("${["sk", "live", "51HabcdefghijklmnopqrstUV"].join("_")}");`,
+      '{ "api_key": "abcd1234efgh5678" }',
+      'headers: { Authorization: "Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig" }',
+      'if (password === "hunter2hunter2") {}',
+      "const secret = \"it's a long secret\";",
+    ].join("\n");
+    const { code: redacted, redactions } = redactSecrets(code);
+
+    expect(redactions).toBe(5);
+    expect(redacted).not.toMatch(/sk_live|abcd1234|eyJ|hunter2|long secret/);
   });
 });
 
@@ -322,6 +366,21 @@ describe("writeTestFile", () => {
     await writeTestFile(file, `${GENERATED_HEADER}\nkeep\nnew\n`, false, (d) => diffs.push(d));
 
     expect(diffs).toEqual([["@@ -1,4 +1,4 @@", ` ${GENERATED_HEADER}`, " keep", "-old", "+new", " "]]);
+  });
+});
+
+describe("renderTestFile", () => {
+  it("does not indent lines inside multi-line template literals", async () => {
+    const plan = await planFor("examples/math.ts");
+    const body = "const s = `a\nb\n\n  c`;\nexpect(s).toBe('a\\nb\\n\\n  c');";
+    const content = renderTestFile({
+      sourceFile: "math.ts",
+      preamble: plan.statements,
+      suites: [{ binding: plan.bindings[0], cases: [{ name: "keeps text", category: "normal", body, async: false }] }],
+      extension: ".ts",
+    });
+
+    expect(content).toContain("    const s = `a\nb\n\n  c`;\n    expect(s)");
   });
 });
 

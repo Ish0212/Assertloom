@@ -239,6 +239,12 @@ describe("analyzer: errors and safety", () => {
     expect(error).toMatchObject({ line: 1 });
   });
 
+  it("omits TypeScript's this parameter", () => {
+    const analysis = analyzeSource("export function f(this: Window, x: number) { return x; }", { inputPath: "inline.ts", extension: ".ts", language: "typescript" });
+
+    expect(analysis.functions[0].parameters.map((p) => p.name)).toEqual(["x"]);
+  });
+
   it("never executes the code it analyzes", () => {
     const code = `globalThis.__assertloomRan = true; export function f() { globalThis.__assertloomRan = true; }`;
     analyzeSource(code, { inputPath: "inline.ts", extension: ".ts", language: "typescript" });
