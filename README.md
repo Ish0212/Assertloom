@@ -244,9 +244,32 @@ How the runner works:
 - **Results.** Each test is reported as passed, failed, or skipped. Failures are labeled `assertion` (an `expect` did not match), `error` (an exception), or `timeout`. Problems that stop the whole file from running are reported separately as infrastructure failures: `module-not-found`, `transform` (syntax or module-format problems), `suite-error`, `crash`, or `timeout`.
 - **Coverage.** Measured with V8 for the source file only, as line, statement, function, and branch percentages.
 
+## GitHub Action
+
+Assertloom also runs as a GitHub Action on pull requests. It generates, runs, and repairs tests for the changed JavaScript and TypeScript files under one shared spending limit, writes a job summary, and uploads the generated tests and a JSON report as an artifact. It never commits, pushes, or comments.
+
+```yaml
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci
+      - uses: Ish0212/Assertloom@v0.2.0
+        with:
+          api-key: ${{ secrets.OPENAI_API_KEY }}
+          max-cost: "0.50"
+```
+
+See [docs/github-action.md](docs/github-action.md) for the complete workflow (including the fork guard), inputs and outputs, budget and failure behavior, and the trust model. A copyable workflow is in [`examples/github-action/assertloom.yml`](examples/github-action/assertloom.yml). The same pipeline runs locally with `assertloom ci --base origin/main`.
+
 ## Benchmark
 
 `npm run bench` downloads one file from each of nine independent open-source packages, pinned to exact versions (`bench/targets.ts`), and runs the full pipeline on each: generate, run, and repair. It records generation, execution, and repair success rates, runtime, model cost, and coverage. Results are written to `bench/results/latest.json` and `latest.md`, and the final test files to `bench/results/tests/`. It needs `OPENAI_API_KEY`; use `--only ms,cookie` for a subset and `--model` to compare models.
+
+In summary: Assertloom generated runnable test suites for all nine files, repaired all nine tests that failed on the first run, and reached 88.6% mean line coverage.
 
 Results from 2026-11-01 with `gpt-5.4-mini`, Node 24.11.1 on Windows, $0.50 limit per file:
 
@@ -305,6 +328,7 @@ assertloom --help
 | `assertloom analyze <file> [--json]` | Statically analyze functions, parameters, imports, and dependencies |
 | `assertloom generate <file> [--provider] [--model] [--base-url] [--out] [--dry-run] [--no-run] [--no-repair] [--max-attempts] [--report] [--mock] [--keep-real] [--allow-network] [--max-cost] [--force]` | Generate Jest tests for exported functions with dependencies mocked, run and repair them, and keep them if they pass |
 | `assertloom run <testFile> [--source] [--timeout] [--allow-network] [--json]` | Run a test file with Jest and report results and coverage |
+| `assertloom ci [--base] [--head] [--files] [--include] [--exclude] [--max-files] [--max-cost] [--max-tokens] [--max-attempts] [--timeout] [--out] [--fail-on] [--dry-run]` | Generate, run, and repair tests for changed files under one shared budget; write `report.json`, `summary.md`, and test previews (used by the [GitHub Action](docs/github-action.md)) |
 | `assertloom help [command]` | Show help |
 
 Supported extensions: `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`. Missing files, directories, unsupported extensions, existing `*.test.*`/`*.spec.*` files, and files over 1 MB are rejected with exit code 1.
@@ -330,9 +354,11 @@ src/
   generator/   Import and mock planning, response schema, case validation, test file writing
   runner/      Jest setup detection, isolated Jest runs, result parsing, coverage
   repair/      Failure classification and the repair loop
+  ci/          Changed-file selection, the multi-file run with a shared budget, and reports for `assertloom ci`
   types/       Shared types
+action.yml     The GitHub Action
 bench/         Benchmark targets, runner, and published results
-docs/          Terminal demo recording
+docs/          GitHub Action guide and terminal demo recording
 examples/      Sample source files and sample-project/
 scripts/       Demo recorder
 fixtures/      Inputs for Assertloom's own tests

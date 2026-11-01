@@ -28,6 +28,8 @@ The test suite never calls a real model. Tests that need model output use `tests
 | `src/ai/` | Provider interface, OpenAI provider, prompts, pricing, secret redaction |
 | `src/runner/` | Jest setup detection, isolated runs, network guard, coverage |
 | `src/repair/` | Failure classification and the repair loop |
+| `src/ci/` | `assertloom ci`: changed-file selection, the multi-file run with a shared budget, reports |
+| `action.yml` | The GitHub Action, a thin wrapper that installs Assertloom and runs `assertloom ci` |
 | `bench/` | Benchmark targets and runner |
 | `fixtures/` | Inputs for the test suite |
 
@@ -38,6 +40,10 @@ The test suite never calls a real model. Tests that need model output use `tests
 3. Run `npm run typecheck` and `npm test` before pushing. CI runs both on Linux, Windows, and macOS with Node 22 and 24.
 4. Keep the README accurate. If behavior or output changes, update the relevant section.
 5. Add a line under "Unreleased" in `CHANGELOG.md`.
+
+If you change `action.yml` or `src/ci/`, `npm test` covers selection, budgets, reports, and redaction with a scripted model (`tests/ci.test.ts`, using the fixture pull request from `fixtures/ci/makeConsumer.mjs`). The "Action check" workflow then runs the action itself in dry-run mode. To try it against a real model, start that workflow by hand with **live** checked; it uses the repository's `OPENAI_API_KEY` secret and spends at most $0.05. Keep every `${{ }}` expression out of `run:` scripts in `action.yml` (pass values through `env:`); a test enforces this.
+
+When releasing, set `assertloom-version` in `action.yml` to the new version. The release workflow refuses a tag that doesn't match.
 
 If you change prompts, validation rules, mocking, or repair, please run `npm run bench` (or a subset with `--only`) and include the before/after summary in the pull request. A full run costs under $0.15 with the default model.
 

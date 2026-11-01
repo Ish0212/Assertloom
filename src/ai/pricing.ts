@@ -66,7 +66,8 @@ export const UNPRICED_TOKEN_LIMIT = 500_000;
 
 /**
  * A hard spending limit for one command. Each model call is checked against its worst case
- * (full prompt plus the maximum output) before it is made.
+ * (full prompt plus the maximum output) before it is made. Share one instance to share the limit
+ * across several files.
  */
 export class Budget {
   readonly usage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
@@ -74,16 +75,27 @@ export class Budget {
   constructor(
     readonly model: string,
     readonly maxUsd: number,
+    /** Token cap used when the model has no known price. */
+    readonly maxTokens: number = UNPRICED_TOKEN_LIMIT,
   ) {}
+
+  get priced(): boolean {
+    return priceFor(this.model) !== undefined;
+  }
 
   get spentUsd(): number | undefined {
     return estimateCost(this.model, this.usage);
   }
 
+  /** The limit that applies to this model, for messages. */
+  describeLimit(): string {
+    return this.priced ? formatUsd(this.maxUsd) : `${this.maxTokens.toLocaleString("en-US")} tokens (no known price for ${this.model})`;
+  }
+
   allows(worstCase: TokenUsage): boolean {
     const projected = { inputTokens: this.usage.inputTokens + worstCase.inputTokens, outputTokens: this.usage.outputTokens + worstCase.outputTokens };
     const cost = estimateCost(this.model, projected);
-    if (cost === undefined) return projected.inputTokens + projected.outputTokens <= UNPRICED_TOKEN_LIMIT;
+    if (cost === undefined) return projected.inputTokens + projected.outputTokens <= this.maxTokens;
     return cost <= this.maxUsd;
   }
 

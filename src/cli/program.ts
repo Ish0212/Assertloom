@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { registerAnalyzeCommand } from "./commands/analyze.js";
+import { registerCiCommand } from "./commands/ci.js";
 import { registerGenerateCommand } from "./commands/generate.js";
 import { registerRunCommand } from "./commands/run.js";
 
@@ -18,6 +19,7 @@ export function createProgram(): Command {
   registerAnalyzeCommand(program);
   registerGenerateCommand(program);
   registerRunCommand(program);
+  registerCiCommand(program);
 
   return program;
 }
