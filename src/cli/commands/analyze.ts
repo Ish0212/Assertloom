@@ -13,23 +13,34 @@ function plural(count: number, word: string, pluralWord = `${word}s`): string {
 }
 
 function signature(fn: FunctionInfo): string {
-  const alias = fn.exportedAs.filter((name) => name !== fn.name);
+  // A method's exportedAs holds the class's export names, not the method's own aliases.
+  const alias = fn.className ? [] : fn.exportedAs.filter((name) => name !== fn.name);
   const notes = [
     alias.length ? `exported as ${alias.join(", ")}` : "",
     fn.throws ? "throws" : "",
     fn.dependencies.length || fn.globals.length ? `uses ${[...fn.dependencies, ...fn.globals.map((g) => `global ${g}`)].join(", ")}` : "",
   ].filter(Boolean);
-  return `${formatSignature(fn)}${notes.length ? `  [${notes.join("; ")}]` : ""}`;
+  const display = fn.className
+    ? fn.kind === "constructor"
+      ? formatSignature(fn)
+      : formatSignature(fn, `${fn.className}.${fn.name}`)
+    : formatSignature(fn);
+  return `${display}${notes.length ? `  [${notes.join("; ")}]` : ""}`;
 }
 
 function printSummary(analysis: FileAnalysis): void {
   const exported = analysis.functions.filter((f) => f.exported);
+  const methods = exported.filter((f) => f.className);
+  const functions = exported.length - methods.length;
   const internal = analysis.functions.length - exported.length;
   const { local, external, builtin } = analysis.dependencies;
   const language = analysis.language === "typescript" ? "TypeScript" : "JavaScript";
 
   console.log(`✓ Parsed ${analysis.file} (${language}, ${analysis.moduleSystem === "none" ? "no imports/exports" : analysis.moduleSystem.toUpperCase()})`);
-  console.log(`✓ Found ${plural(exported.length, "exported function")}${internal ? ` (+${internal} internal)` : ""}`);
+  console.log(
+    `✓ Found ${plural(functions, "exported function")}${methods.length ? ` and ${plural(methods.length, "exported method")}` : ""}` +
+      `${analysis.classes.length ? ` in ${plural(analysis.classes.length, "class", "classes")}` : ""}${internal ? ` (+${internal} internal)` : ""}`,
+  );
   console.log(
     `✓ Found ${plural(local.length + external.length + builtin.length, "dependency", "dependencies")} ` +
       `(${external.length} external, ${local.length} local, ${builtin.length} built-in)`,

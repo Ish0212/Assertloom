@@ -1,8 +1,9 @@
 import { formatSignature } from "../analyzer/format.js";
 import type { Binding } from "../generator/importPlan.js";
-import type { FileAnalysis } from "../types/index.js";
+import type { FileAnalysis, FunctionInfo } from "../types/index.js";
 
 const BODY_RULES = `- Call target functions only through the binding names listed. They are already imported; Assertloom writes the imports, describe blocks, and it() wrappers.
+- For a class method listed as \`Class.method\`, create an instance with \`new Class(...)\` (using the constructor signature given) and call the method on that instance; call static methods directly on the class (\`Class.method(...)\`). Never mock or spy on the class itself.
 - Do not write import or require statements, describe/it/test wrappers, or jest.mock calls.
 - Assert the behavior of the source as written. Work out expected values by reading the code; never guess. If you cannot be sure of an exact value, assert something you can verify (type, length, ordering, a relationship between outputs).
 - Tests must be deterministic: no real network or file system access, real timers, Date.now(), or Math.random().
@@ -24,7 +25,8 @@ Rules:
 ${BODY_RULES}
 - Cover each function with normal cases (typical input) and edge cases (empty values, zero, negative numbers, boundaries, unicode where relevant). Add error cases when the source throws or rejects, using toThrow / rejects.toThrow and matching the message when the source shows it.
 - For functions that use mocked dependencies, also cover failure paths: make the dependency reject or return an error result, then assert what the source does (rejects with its own message, rethrows, or falls back to a default).
-- Write 3 to 6 cases per function. Each case should check one behavior with a few focused expect() calls.`;
+- Write 3 to 6 cases per function or method. Each case should check one behavior with a few focused expect() calls.
+- For a class, cover the constructor (valid and edge-case arguments, and the initial state it creates) and each method, including how methods change the instance's state across calls.`;
 
 export const REPAIR_SYSTEM_PROMPT = `You are Assertloom, a tool that repairs failing Jest tests it generated. You cannot change the source code; only the tests.
 
@@ -53,13 +55,33 @@ function mocksSection(mockSummary: string | undefined): string {
 export function buildGenerationPrompt({ analysis, code, bindings, testFileName, mockSummary }: GenerationPromptInput): string {
   const language = analysis.language === "typescript" ? "typescript" : "javascript";
 
+  const constructors = new Map<string, FunctionInfo>();
+  for (const fn of analysis.functions) {
+    if (fn.kind === "constructor" && fn.className) constructors.set(fn.className, fn);
+  }
+
   const targets = bindings
-    .map(({ binding, fn }) => {
-      const notes = [
-        binding !== fn.name ? `declared as \`${fn.name}\` in the source` : "",
-        fn.throws ? "throws in its own body" : "",
-        `defined at line ${fn.line}`,
-      ].filter(Boolean);
+    .map(({ binding, fn, classBinding }) => {
+      const notes: string[] = [];
+      if (fn.className && classBinding) {
+        if (fn.kind === "constructor") {
+          notes.push(`constructor of class \`${classBinding}\``);
+        } else {
+          const ctor = constructors.get(fn.className);
+          const construct = ctor
+            ? `construct an instance with \`new ${formatSignature(ctor, classBinding)}\``
+            : `construct an instance with \`new ${classBinding}()\``;
+          notes.push(
+            fn.static
+              ? `static method of class \`${classBinding}\`; call it as \`${classBinding}.${fn.name}(...)\``
+              : `instance method of class \`${classBinding}\`; ${construct}, then call the method on the instance`,
+          );
+        }
+      } else if (binding !== fn.name) {
+        notes.push(`declared as \`${fn.name}\` in the source`);
+      }
+      if (fn.throws) notes.push("throws in its own body");
+      notes.push(`defined at line ${fn.line}`);
       return `- \`${binding}\`: \`${formatSignature(fn, binding)}\` (${notes.join("; ")})`;
     })
     .join("\n");

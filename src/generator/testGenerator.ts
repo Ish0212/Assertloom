@@ -53,7 +53,7 @@ export async function generateTests(options: {
   const analysis = analyzeSource(code, source);
   const targets = analysis.functions.filter((fn) => fn.exported);
 
-  if (targets.length === 0) throw new GenerationError(`No exported functions in ${analysis.file}.`);
+  if (targets.length === 0) throw new GenerationError(`No exported functions or class methods in ${analysis.file}.`);
   if (code.length > MAX_SOURCE_CHARS) {
     throw new GenerationError(`${analysis.file} is ${code.length} characters; the limit for sending to a model is ${MAX_SOURCE_CHARS}.`);
   }

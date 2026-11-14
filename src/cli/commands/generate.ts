@@ -151,7 +151,7 @@ export function registerGenerateCommand(program: Command): void {
       const byCategory = (category: string) =>
         result.suites.reduce((n, s) => n + s.cases.filter((c) => c.category === category).length, 0);
 
-      console.log(`✓ Analyzed ${exported} exported functions (${result.suites.length} tested)`);
+      console.log(`✓ Analyzed ${exported} exported functions and methods (${result.suites.length} tested)`);
       printMocks(result);
       if (result.redactions) console.log(`✓ Redacted ${result.redactions} likely secrets before sending`);
       console.log(

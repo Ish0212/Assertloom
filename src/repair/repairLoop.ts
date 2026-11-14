@@ -235,7 +235,8 @@ export async function repairTests(options: RepairOptions): Promise<RepairResult>
       }
 
       if (proposal.action === "fix") {
-        const check = checkBody(proposal.body, options.extension, new Set(suites.map((s) => s.binding.binding)));
+        const targets = new Set(suites.flatMap((s) => [s.binding.binding, s.binding.classBinding]).filter((t): t is string => !!t));
+        const check = checkBody(proposal.body, options.extension, targets);
         if ("error" in check) {
           invalid(`proposed body ${check.error}`);
           continue;
