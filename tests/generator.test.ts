@@ -80,6 +80,33 @@ describe("planImports", () => {
     ]);
   });
 
+  it("imports each class once and binds methods as Class.method", async () => {
+    const plan = await planFor("fixtures/analyzer/classes.ts");
+
+    expect(plan.statements).toEqual(['import Registry, { total, Counter, Box } from "./classes";']);
+    expect(plan.bindings.map((b) => [b.binding, b.exportName, b.classBinding ?? null])).toEqual([
+      ["total", "total", null],
+      ["Counter", "Counter", "Counter"],
+      ["Counter.increment", "Counter", "Counter"],
+      ["Counter.decrement", "Counter", "Counter"],
+      ["Counter.reset", "Counter", "Counter"],
+      ["Counter.incrementLater", "Counter", "Counter"],
+      ["Counter.divide", "Counter", "Counter"],
+      ["Counter.from", "Counter", "Counter"],
+      ["Box", "Box", "Box"],
+      ["Box.get", "Box", "Box"],
+      ["Box.set", "Box", "Box"],
+      ["Registry.register", "default", "Registry"],
+      ["Registry.lookup", "default", "Registry"],
+    ]);
+  });
+
+  it("uses require() for CommonJS classes", async () => {
+    expect((await planFor("fixtures/analyzer/classes.cjs")).statements).toEqual([
+      'const { Stack, Queue, Helper } = require("./classes.cjs");',
+    ]);
+  });
+
   it("renames exports that are reserved words or not identifiers", () => {
     const plan = (code: string, extension: ".js" | ".cjs", file: string) => {
       const analysis = analyzeSource(code, { inputPath: file, extension, language: "javascript" });
@@ -177,6 +204,35 @@ describe("validateGeneration", () => {
     ]);
   });
 
+  it("rejects mocking the class under test", async () => {
+    const plan = await planFor("fixtures/analyzer/classes.ts");
+    const { suites, rejected } = validateGeneration(
+      {
+        suites: [
+          {
+            functionName: "Counter.increment",
+            cases: [
+              { name: "mocks the class", category: "normal", body: "Counter.mockReturnValue({}); expect(1).toBe(1);" },
+              { name: "uses a real instance", category: "normal", body: "const c = new Counter(); expect(c.increment(1)).toBe(1);" },
+            ],
+          },
+        ],
+      },
+      plan.bindings,
+      ".ts",
+    );
+
+    expect(suites).toHaveLength(1);
+    expect(suites[0].cases).toHaveLength(1);
+    expect(rejected).toEqual([
+      {
+        functionName: "Counter.increment",
+        name: "mocks the class",
+        reason: "calls mockReturnValue() on `Counter`, a real function under test (only dependencies are mocked)",
+      },
+    ]);
+  });
+
   it("deduplicates names and caps cases per function", async () => {
     const plan = await planFor("examples/math.ts");
     const cases = Array.from({ length: MAX_CASES_PER_FUNCTION + 2 }, () => ({
@@ -201,6 +257,21 @@ describe("prompts", () => {
     expect(prompt).toContain("- `toSlug`: `toSlug(text: string): string` (declared as `slugify` in the source; defined at line 7)");
     expect(prompt).toContain("```typescript\nSOURCE_MARKER\n```");
     expect(GENERATION_SYSTEM_PROMPT).toContain("Do not write import or require statements");
+  });
+
+  it("tells the model how to construct classes and call methods", async () => {
+    const { source, analysis } = await load("fixtures/analyzer/classes.ts");
+    const plan = planImports(analysis, exported(analysis), source.absolutePath, previewPathFor(source.absolutePath));
+    const prompt = buildGenerationPrompt({ analysis, code: "SOURCE_MARKER", bindings: plan.bindings, testFileName: "classes.test.preview.ts" });
+
+    expect(prompt).toContain("- `Counter`: `Counter(initial = 0)` (constructor of class `Counter`; defined at line 4)");
+    expect(prompt).toContain(
+      "- `Counter.increment`: `Counter.increment(by = 1): number` (instance method of class `Counter`; construct an instance with `new Counter(initial = 0)`, then call the method on the instance; defined at line 8)",
+    );
+    expect(prompt).toContain(
+      "- `Counter.from`: `Counter.from(start: number): Counter` (static method of class `Counter`; call it as `Counter.from(...)`; defined at line 31)",
+    );
+    expect(GENERATION_SYSTEM_PROMPT).toContain("create an instance with `new Class(...)`");
   });
 
   it("produces a schema OpenAI structured outputs accepts", () => {
@@ -302,6 +373,70 @@ describe("divide", () => {
     expect(prompt).not.toContain("super-secret-value");
     expect(prompt).toContain("`getName`: `getName(): string`");
     expect(provider.requests[0].system).toBe(GENERATION_SYSTEM_PROMPT);
+  });
+
+  it("generates a Jest file for class methods from model output", async () => {
+    const file = path.join(dir, "counter.ts");
+    await writeFile(
+      file,
+      [
+        "export class Counter {",
+        "  private count: number;",
+        "  constructor(initial = 0) { this.count = initial; }",
+        "  increment(by = 1): number { this.count += by; return this.count; }",
+        "  reset(): void { this.count = 0; }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const provider = new FakeProvider({
+      suites: [
+        {
+          functionName: "Counter",
+          cases: [{ name: "starts at the given value", category: "normal", body: "expect(new Counter(3).increment(0)).toBe(3);" }],
+        },
+        {
+          functionName: "Counter.increment",
+          cases: [{ name: "adds the given amount", category: "normal", body: "const c = new Counter();\nexpect(c.increment(2)).toBe(2);" }],
+        },
+        {
+          functionName: "Counter.reset",
+          cases: [
+            { name: "resets to zero", category: "normal", body: "const c = new Counter(5);\nc.reset();\nexpect(c.increment(0)).toBe(0);" },
+          ],
+        },
+      ],
+    });
+
+    const result = await generateTests({ source: await validateSourceFile(file), provider });
+
+    expect(result.suites).toHaveLength(3);
+    expect(provider.requests[0].prompt).toContain("construct an instance with `new Counter(initial = 0)`");
+    expect(result.content).toBe(`${GENERATED_HEADER} Source: ${result.analysis.file}. Review before committing.
+import { Counter } from "./counter";
+
+describe("Counter", () => {
+  it("starts at the given value", () => {
+    expect(new Counter(3).increment(0)).toBe(3);
+  });
+});
+
+describe("Counter.increment", () => {
+  it("adds the given amount", () => {
+    const c = new Counter();
+    expect(c.increment(2)).toBe(2);
+  });
+});
+
+describe("Counter.reset", () => {
+  it("resets to zero", () => {
+    const c = new Counter(5);
+    c.reset();
+    expect(c.increment(0)).toBe(0);
+  });
+});
+`);
+    expect(() => parseSource(result.content, ".ts")).not.toThrow();
   });
 
   it("wraps async bodies in async callbacks", async () => {

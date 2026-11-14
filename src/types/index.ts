@@ -25,12 +25,16 @@ export interface ParameterInfo {
 }
 
 export interface FunctionInfo {
-  /** Local name, or `"default"` for an anonymous default export. */
+  /** Local name, or `"default"` for an anonymous default export. For a constructor, the class name. */
   name: string;
   exported: boolean;
-  /** Names this function is exported under; `"default"` for a default export. */
+  /** Names this function is exported under; `"default"` for a default export. For a method, the class's export names. */
   exportedAs: string[];
-  kind: "declaration" | "arrow" | "expression";
+  kind: "declaration" | "arrow" | "expression" | "method" | "constructor";
+  /** Owning class, for methods and constructors. */
+  className?: string;
+  /** True for static methods; instance methods are called on an instance. */
+  static?: boolean;
   async: boolean;
   generator: boolean;
   parameters: ParameterInfo[];
@@ -41,6 +45,18 @@ export interface FunctionInfo {
   dependencies: string[];
   /** Mockable globals referenced inside the function body, such as `fetch`. */
   globals: string[];
+  line: number;
+}
+
+export interface ClassInfo {
+  /** Local name, or `"default"` for an anonymous default export. */
+  name: string;
+  exported: boolean;
+  /** Names this class is exported under; `"default"` for a default export. */
+  exportedAs: string[];
+  /** Source text of the `extends` expression, when the class has a superclass. */
+  superClass?: string;
+  typeParameters?: string;
   line: number;
 }
 
@@ -100,6 +116,8 @@ export interface FileAnalysis {
   language: SourceLanguage;
   moduleSystem: "esm" | "commonjs" | "mixed" | "none";
   functions: FunctionInfo[];
+  /** Top-level classes; their methods appear in `functions` with `className` set. */
+  classes: ClassInfo[];
   imports: ImportInfo[];
   /** One entry per imported binding, with how the source uses it. */
   importUsage: ImportUsage[];

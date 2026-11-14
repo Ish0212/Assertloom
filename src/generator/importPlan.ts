@@ -2,11 +2,13 @@ import path from "node:path";
 import type { FileAnalysis, FunctionInfo } from "../types/index.js";
 
 export interface Binding {
-  /** Name the test code uses to call the function. */
+  /** Name the test code uses to call the function. For a class method, `Class.method`; for a constructor, the class itself. */
   binding: string;
-  /** Exported name in the source module, or `"default"`. */
+  /** Exported name in the source module, or `"default"`. For a method, the class's export name. */
   exportName: string;
   fn: FunctionInfo;
+  /** Local import name of the owning class, for class methods and constructors. */
+  classBinding?: string;
 }
 
 export interface ImportPlan {
@@ -55,30 +57,73 @@ export function planImports(
 ): ImportPlan {
   const bindings: Binding[] = [];
   const used = new Set<string>();
+  /** Distinct { local import name, export name } pairs for the import statement. */
+  const imports: Array<{ local: string; exportName: string }> = [];
+  const addImport = (local: string, exportName: string) => {
+    if (!imports.some((i) => i.exportName === exportName)) imports.push({ local, exportName });
+  };
 
-  for (const fn of functions) {
+  const standalone = functions.filter((fn) => !fn.className);
+  const methods = functions.filter((fn) => fn.className);
+
+  for (const fn of standalone) {
     const named = fn.exportedAs.find((name) => name !== "default");
-    if (named) bindings.push({ binding: localName(named, used), exportName: named, fn });
+    if (named) {
+      const binding = localName(named, used);
+      bindings.push({ binding, exportName: named, fn });
+      addImport(binding, named);
+    }
   }
 
-  for (const fn of functions) {
+  for (const fn of standalone) {
     if (fn.exportedAs.some((name) => name !== "default") || !fn.exportedAs.includes("default")) continue;
     const base = fn.name !== "default" ? fn.name : camelCase(path.basename(sourcePath).replace(/\.[^.]+$/, ""));
-    bindings.push({ binding: localName(used.has(base) ? `${base}Default` : base, used), exportName: "default", fn });
+    const binding = localName(used.has(base) ? `${base}Default` : base, used);
+    bindings.push({ binding, exportName: "default", fn });
+    addImport(binding, "default");
+  }
+
+  // One import per class; one binding per method, named `Class.method`
+  // (the constructor's binding is the class itself, since tests construct it).
+  const classOrder: string[] = [];
+  for (const fn of methods) if (fn.className && !classOrder.includes(fn.className)) classOrder.push(fn.className);
+  for (const className of classOrder) {
+    const members = methods.filter((fn) => fn.className === className);
+    const exportedAs = members[0].exportedAs;
+    const named = exportedAs.find((name) => name !== "default");
+    let classBinding: string;
+    let exportName: string;
+    if (named) {
+      classBinding = localName(named, used);
+      exportName = named;
+    } else {
+      const base = className !== "default" ? className : camelCase(path.basename(sourcePath).replace(/\.[^.]+$/, ""));
+      classBinding = localName(used.has(base) ? `${base}Default` : base, used);
+      exportName = "default";
+    }
+    addImport(classBinding, exportName);
+    for (const fn of members) {
+      bindings.push({
+        binding: fn.kind === "constructor" ? classBinding : `${classBinding}.${fn.name}`,
+        exportName,
+        fn,
+        classBinding,
+      });
+    }
   }
 
   const specifier = JSON.stringify(importSpecifier(testPath, sourcePath));
-  const defaultBinding = bindings.find((b) => b.exportName === "default")?.binding;
-  const named = bindings.filter((b) => b.exportName !== "default");
+  const defaultImport = imports.find((i) => i.exportName === "default")?.local;
+  const namedImports = imports.filter((i) => i.exportName !== "default");
   const statements: string[] = [];
 
   if (analysis.moduleSystem === "commonjs") {
-    const properties = named.map((b) => (b.binding === b.exportName ? b.binding : `${exportKey(b.exportName)}: ${b.binding}`));
-    if (defaultBinding) statements.push(`const ${defaultBinding} = require(${specifier});`);
+    const properties = namedImports.map((i) => (i.local === i.exportName ? i.local : `${exportKey(i.exportName)}: ${i.local}`));
+    if (defaultImport) statements.push(`const ${defaultImport} = require(${specifier});`);
     if (properties.length) statements.push(`const { ${properties.join(", ")} } = require(${specifier});`);
   } else {
-    const specifiers = named.map((b) => (b.binding === b.exportName ? b.binding : `${exportKey(b.exportName)} as ${b.binding}`));
-    const clauses = [defaultBinding, specifiers.length ? `{ ${specifiers.join(", ")} }` : undefined].filter(Boolean);
+    const specifiers = namedImports.map((i) => (i.local === i.exportName ? i.local : `${exportKey(i.exportName)} as ${i.local}`));
+    const clauses = [defaultImport, specifiers.length ? `{ ${specifiers.join(", ")} }` : undefined].filter(Boolean);
     if (clauses.length) statements.push(`import ${clauses.join(", ")} from ${specifier};`);
   }
 

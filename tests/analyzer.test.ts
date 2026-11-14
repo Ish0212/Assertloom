@@ -207,6 +207,85 @@ describe("analyzer: CommonJS", () => {
   });
 });
 
+describe("analyzer: classes (classes.ts)", async () => {
+  const analysis = await analyze("fixtures/analyzer/classes.ts");
+
+  it("lists classes with export status and type parameters", () => {
+    expect(analysis.classes.map((c) => [c.name, c.exportedAs, c.typeParameters])).toEqual([
+      ["Counter", ["Counter"], undefined],
+      ["Box", ["Box"], "<T>"],
+      ["Internal", [], undefined],
+      ["Registry", ["default"], undefined],
+    ]);
+  });
+
+  it("extracts constructors and methods with class names", () => {
+    expect(analysis.functions.filter((f) => f.className).map((f) => [f.className, f.name, f.kind, f.static ?? false])).toEqual([
+      ["Counter", "Counter", "constructor", false],
+      ["Counter", "increment", "method", false],
+      ["Counter", "decrement", "method", false],
+      ["Counter", "reset", "method", false],
+      ["Counter", "incrementLater", "method", false],
+      ["Counter", "divide", "method", false],
+      ["Counter", "from", "method", true],
+      ["Box", "Box", "constructor", false],
+      ["Box", "get", "method", false],
+      ["Box", "set", "method", false],
+      ["Internal", "ping", "method", false],
+      ["Registry", "register", "method", false],
+      ["Registry", "lookup", "method", false],
+    ]);
+    expect(fn(analysis, "increment")).toMatchObject({
+      kind: "method",
+      className: "Counter",
+      exported: true,
+      exportedAs: ["Counter"],
+      parameters: [{ name: "by", optional: true, rest: false, defaultValue: "1" }],
+    });
+    expect(fn(analysis, "divide")).toMatchObject({ throws: true });
+    expect(fn(analysis, "incrementLater")).toMatchObject({ async: true, returnType: "Promise<number>" });
+    expect(fn(analysis, "from")).toMatchObject({ static: true, returnType: "Counter" });
+  });
+
+  it("skips getters, #private, and TS-private methods", () => {
+    expect(analysis.functions.some((f) => ["value", "secret", "helper"].includes(f.name))).toBe(false);
+  });
+
+  it("marks methods of internal classes as not exported", () => {
+    expect(fn(analysis, "ping")).toMatchObject({ exported: false, exportedAs: [], className: "Internal" });
+  });
+
+  it("unwraps constructor parameter properties", () => {
+    expect(fn(analysis, "Box").parameters).toEqual([{ name: "item", type: "T", optional: false, rest: false }]);
+  });
+
+  it("keeps standalone functions alongside classes", () => {
+    expect(fn(analysis, "total")).toMatchObject({ kind: "declaration", exported: true, className: undefined });
+  });
+});
+
+describe("analyzer: CommonJS classes (classes.cjs)", async () => {
+  const analysis = await analyze("fixtures/analyzer/classes.cjs");
+
+  it("reads classes from module.exports objects and assignments", () => {
+    expect(analysis.moduleSystem).toBe("commonjs");
+    expect(analysis.classes.map((c) => [c.name, c.exportedAs])).toEqual([
+      ["Stack", ["Stack"]],
+      ["Queue", ["Queue"]],
+      ["Helper", ["Helper"]],
+    ]);
+    expect(analysis.functions.map((f) => [f.className, f.name, f.kind, f.static ?? false])).toEqual([
+      ["Stack", "Stack", "constructor", false],
+      ["Stack", "push", "method", false],
+      ["Stack", "pop", "method", false],
+      ["Stack", "empty", "method", true],
+      ["Queue", "Queue", "constructor", false],
+      ["Queue", "enqueue", "method", false],
+      ["Helper", "greet", "method", false],
+    ]);
+  });
+});
+
 describe("analyzer: JSX (component.tsx)", () => {
   it("parses TSX and tracks hooks as dependencies", async () => {
     const analysis = await analyze("fixtures/analyzer/component.tsx");

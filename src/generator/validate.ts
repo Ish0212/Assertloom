@@ -164,7 +164,8 @@ export function checkBody(
 
 export function validateGeneration(generation: Generation, bindings: Binding[], extension: SupportedExtension): ValidationResult {
   const byName = new Map(bindings.map((b) => [b.binding, b]));
-  const targets = new Set(byName.keys());
+  /** Class import names are real code too; tests must not mock or spy on them. */
+  const targets = new Set([...byName.keys(), ...bindings.map((b) => b.classBinding).filter((b): b is string => !!b)]);
   const suites = new Map<string, ValidatedSuite>();
   const rejected: RejectedCase[] = [];
 

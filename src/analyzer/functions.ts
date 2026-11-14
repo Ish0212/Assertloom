@@ -1,6 +1,9 @@
 import traverse from "@babel/traverse";
 import type {
   ArrowFunctionExpression,
+  ClassDeclaration,
+  ClassExpression,
+  ClassMethod,
   Expression,
   File,
   FunctionDeclaration,
@@ -9,16 +12,24 @@ import type {
   ObjectMethod,
   Statement,
 } from "@babel/types";
-import type { FunctionInfo, ParameterInfo } from "../types/index.js";
+import type { ClassInfo, FunctionInfo, ParameterInfo } from "../types/index.js";
 import type { ImportScan } from "./dependencies.js";
 import { isMockableGlobal } from "./usage.js";
 
-type FunctionNode = FunctionDeclaration | FunctionExpression | ArrowFunctionExpression | ObjectMethod;
+type FunctionNode = FunctionDeclaration | FunctionExpression | ArrowFunctionExpression | ObjectMethod | ClassMethod;
+
+interface ClassRecord {
+  name: string;
+  node: ClassDeclaration | ClassExpression;
+  exportedAs: string[];
+}
 
 interface Candidate {
   name: string;
   node: FunctionNode;
   exportedAs: string[];
+  /** Owning class, for methods and constructors; the class record holds the export names. */
+  classRecord?: ClassRecord;
 }
 
 function slice(code: string, node: Node | null | undefined): string | undefined {
@@ -38,6 +49,8 @@ function patternText(code: string, node: Node & { typeAnnotation?: Node | null }
 
 function parameterInfo(code: string, param: FunctionNode["params"][number]): ParameterInfo {
   switch (param.type) {
+    case "TSParameterProperty":
+      return parameterInfo(code, param.parameter as FunctionNode["params"][number]);
     case "Identifier":
       return { name: param.name, type: typeText(code, param.typeAnnotation), optional: !!param.optional, rest: false };
     case "AssignmentPattern": {
@@ -121,29 +134,62 @@ function umdFactory(expression: Expression): FunctionExpression | ArrowFunctionE
 }
 
 /** `returnExports` treats `return x` as `module.exports = x` (the body of a UMD factory). */
-function collectCandidates(body: Statement[], returnExports = false): Candidate[] {
+function collectCandidates(body: Statement[], returnExports = false): { candidates: Candidate[]; classes: ClassRecord[] } {
   const candidates: Candidate[] = [];
+  const classes: ClassRecord[] = [];
   const byLocalName = new Map<string, Candidate>();
+  const byLocalClass = new Map<string, ClassRecord>();
 
-  const addCandidate = (name: string, node: FunctionNode, exportedAs: string[] = []) => {
+  const addCandidate = (name: string, node: FunctionNode, exportedAs: string[] = [], classRecord?: ClassRecord) => {
     const existing = candidates.find((c) => c.node === node);
     if (existing) {
       for (const e of exportedAs) if (!existing.exportedAs.includes(e)) existing.exportedAs.push(e);
       return existing;
     }
-    const candidate = { name, node, exportedAs };
+    const candidate = { name, node, exportedAs, classRecord };
     candidates.push(candidate);
-    if (name !== "default") byLocalName.set(name, candidate);
+    if (!classRecord && name !== "default") byLocalName.set(name, candidate);
     return candidate;
+  };
+
+  /**
+   * Registers a class and its testable methods: the constructor and public
+   * instance/static methods. Getters, setters, and #private or TS-private /
+   * TS-protected methods are skipped — tests outside the class cannot call them.
+   */
+  const addClass = (name: string, node: ClassDeclaration | ClassExpression, exportedAs: string[] = []) => {
+    const existing = classes.find((c) => c.node === node);
+    const record = existing ?? { name, node, exportedAs: [...exportedAs] };
+    if (!existing) {
+      classes.push(record);
+      if (name !== "default") byLocalClass.set(name, record);
+    } else {
+      for (const e of exportedAs) if (!record.exportedAs.includes(e)) record.exportedAs.push(e);
+    }
+    for (const member of node.body.body) {
+      if (member.type !== "ClassMethod") continue;
+      if (member.kind !== "constructor" && member.kind !== "method") continue;
+      if (member.accessibility === "private" || member.accessibility === "protected") continue;
+      if (member.computed && member.key.type !== "StringLiteral") continue;
+      const methodName = member.kind === "constructor" ? record.name : propertyName(member.key);
+      if (!methodName) continue;
+      addCandidate(methodName, member, [], record);
+    }
+    return record;
   };
 
   const addDeclaration = (stmt: Statement | null | undefined, exported: boolean) => {
     if (stmt?.type === "FunctionDeclaration" && stmt.id) {
       addCandidate(stmt.id.name, stmt, exported ? [stmt.id.name] : []);
+    } else if (stmt?.type === "ClassDeclaration") {
+      addClass(stmt.id?.name ?? "default", stmt, exported ? [stmt.id?.name ?? "default"] : []);
     } else if (stmt?.type === "VariableDeclaration") {
       for (const decl of stmt.declarations) {
         const fn = asFunction(decl.init);
         if (fn && decl.id.type === "Identifier") addCandidate(decl.id.name, fn, exported ? [decl.id.name] : []);
+        if (decl.init?.type === "ClassExpression" && decl.id.type === "Identifier") {
+          addClass(decl.id.name, decl.init, exported ? [decl.id.name] : []);
+        }
       }
     }
   };
@@ -165,6 +211,7 @@ function collectCandidates(body: Statement[], returnExports = false): Candidate[
         if (!key) continue;
         const fn = asFunction(prop.value);
         if (fn) addCandidate(key, fn, [key]);
+        else if (prop.value.type === "ClassExpression") addClass(key, prop.value, [key]);
         else if (prop.value.type === "Identifier") pendingExports.push({ local: prop.value.name, exported: key });
       }
     }
@@ -173,6 +220,7 @@ function collectCandidates(body: Statement[], returnExports = false): Candidate[
   const exportModule = (value: Expression) => {
     const fn = asFunction(value);
     if (fn) addCandidate(fn.type === "FunctionExpression" && fn.id ? fn.id.name : "default", fn, ["default"]);
+    else if (value.type === "ClassExpression") addClass(value.id?.name ?? "default", value, ["default"]);
     else if (value.type === "Identifier") {
       pendingExports.push({ local: value.name, exported: "default" });
       pendingObjects.push(value.name);
@@ -187,6 +235,10 @@ function collectCandidates(body: Statement[], returnExports = false): Candidate[
 
       case "FunctionDeclaration":
         addDeclaration(stmt, false);
+        break;
+
+      case "ClassDeclaration":
+        addClass(stmt.id?.name ?? "default", stmt, []);
         break;
 
       case "VariableDeclaration":
@@ -213,6 +265,8 @@ function collectCandidates(body: Statement[], returnExports = false): Candidate[
         const decl = stmt.declaration;
         if (decl.type === "FunctionDeclaration") {
           addCandidate(decl.id?.name ?? "default", decl, ["default"]);
+        } else if (decl.type === "ClassDeclaration" || decl.type === "ClassExpression") {
+          addClass(decl.id?.name ?? "default", decl, ["default"]);
         } else if (decl.type === "Identifier") {
           pendingExports.push({ local: decl.name, exported: "default" });
         } else {
@@ -226,7 +280,14 @@ function collectCandidates(body: Statement[], returnExports = false): Candidate[
         const expr = stmt.expression;
         const factory = umdFactory(expr);
         if (factory?.body.type === "BlockStatement") {
-          for (const c of collectCandidates(factory.body.body, true)) addCandidate(c.name, c.node, c.exportedAs);
+          const inner = collectCandidates(factory.body.body, true);
+          for (const c of inner.candidates) addCandidate(c.name, c.node, c.exportedAs, c.classRecord);
+          for (const cls of inner.classes) {
+            if (!classes.some((c) => c.node === cls.node)) {
+              classes.push(cls);
+              if (cls.name !== "default") byLocalClass.set(cls.name, cls);
+            }
+          }
           break;
         }
         if (expr.type !== "AssignmentExpression" || expr.operator !== "=" || expr.left.type !== "MemberExpression") break;
@@ -248,6 +309,7 @@ function collectCandidates(body: Statement[], returnExports = false): Candidate[
 
         const fn = asFunction(expr.right);
         if (fn) addCandidate(key, fn, [key]);
+        else if (expr.right.type === "ClassExpression") addClass(key, expr.right, [key]);
         else if (expr.right.type === "Identifier") pendingExports.push({ local: expr.right.name, exported: key });
         else if (expr.right.type === "MemberExpression" && expr.right.object.type === "Identifier" && !expr.right.computed) {
           const member = propertyName(expr.right.property);
@@ -269,6 +331,7 @@ function collectCandidates(body: Statement[], returnExports = false): Candidate[
       if (prop.type !== "ObjectProperty" || propertyName(prop.key) !== property) continue;
       const fn = asFunction(prop.value);
       if (fn) addCandidate(exported, fn, [exported]);
+      else if (prop.value.type === "ClassExpression") addClass(exported, prop.value, [exported]);
       else if (prop.value.type === "Identifier") pendingExports.push({ local: prop.value.name, exported });
     }
   }
@@ -276,13 +339,15 @@ function collectCandidates(body: Statement[], returnExports = false): Candidate[
   for (const { local, exported } of pendingExports) {
     const candidate = byLocalName.get(local);
     if (candidate && !candidate.exportedAs.includes(exported)) candidate.exportedAs.push(exported);
+    const cls = byLocalClass.get(local);
+    if (cls && !cls.exportedAs.includes(exported)) cls.exportedAs.push(exported);
   }
 
-  return candidates;
+  return { candidates, classes };
 }
 
-export function extractFunctions(ast: File, code: string, scan: ImportScan): FunctionInfo[] {
-  const candidates = collectCandidates(ast.program.body);
+export function extractFunctions(ast: File, code: string, scan: ImportScan): { functions: FunctionInfo[]; classes: ClassInfo[] } {
+  const { candidates, classes } = collectCandidates(ast.program.body);
   const byNode = new Map<Node, Candidate>(candidates.map((c) => [c.node, c]));
   const results: FunctionInfo[] = [];
 
@@ -316,9 +381,20 @@ export function extractFunctions(ast: File, code: string, scan: ImportScan): Fun
 
       results.push({
         name: candidate.name,
-        exported: candidate.exportedAs.length > 0,
-        exportedAs: candidate.exportedAs,
-        kind: node.type === "ArrowFunctionExpression" ? "arrow" : node.type === "FunctionDeclaration" ? "declaration" : "expression",
+        exported: candidate.classRecord ? candidate.classRecord.exportedAs.length > 0 : candidate.exportedAs.length > 0,
+        exportedAs: candidate.classRecord ? [...candidate.classRecord.exportedAs] : candidate.exportedAs,
+        kind:
+          node.type === "ClassMethod"
+            ? node.kind === "constructor"
+              ? "constructor"
+              : "method"
+            : node.type === "ArrowFunctionExpression"
+              ? "arrow"
+              : node.type === "FunctionDeclaration"
+                ? "declaration"
+                : "expression",
+        className: candidate.classRecord?.name,
+        static: node.type === "ClassMethod" ? node.static : undefined,
         async: node.async,
         generator: !!node.generator,
         parameters: node.params.filter((p) => !(p.type === "Identifier" && p.name === "this")).map((p) => parameterInfo(code, p)),
@@ -332,5 +408,17 @@ export function extractFunctions(ast: File, code: string, scan: ImportScan): Fun
     },
   });
 
-  return results.sort((a, b) => a.line - b.line);
+  return {
+    functions: results.sort((a, b) => a.line - b.line),
+    classes: classes
+      .map((c) => ({
+        name: c.name,
+        exported: c.exportedAs.length > 0,
+        exportedAs: c.exportedAs,
+        superClass: slice(code, c.node.superClass),
+        typeParameters: slice(code, c.node.typeParameters),
+        line: c.node.loc?.start.line ?? 0,
+      }))
+      .sort((a, b) => a.line - b.line),
+  };
 }

@@ -11,6 +11,7 @@ export { ParseError, parseSource } from "./parser.js";
 export function analyzeSource(code: string, source: Pick<SourceFile, "inputPath" | "extension" | "language">): FileAnalysis {
   const ast = parseSource(code, source.extension);
   const scan = scanImports(ast);
+  const { functions, classes } = extractFunctions(ast, code, scan);
 
   const usesEsm =
     scan.imports.some((i) => i.kind === "import" || i.kind === "re-export") ||
@@ -22,7 +23,8 @@ export function analyzeSource(code: string, source: Pick<SourceFile, "inputPath"
     file: source.inputPath.replaceAll("\\", "/"),
     language: source.language,
     moduleSystem: usesEsm && usesCommonJs ? "mixed" : usesEsm ? "esm" : usesCommonJs ? "commonjs" : "none",
-    functions: extractFunctions(ast, code, scan),
+    functions,
+    classes,
     imports: scan.imports,
     importUsage,
     globals,
